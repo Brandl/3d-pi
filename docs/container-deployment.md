@@ -99,6 +99,12 @@ A real containerized pi turn called `cad_inspect` successfully. Conversation/req
 
 Source checkpoint `d93b44b` adds the CAD command ribbon/model browser/bottom timeline and component reference UI. Only the web container was replaced (image `2f8edd7f08c0`); the running CAD and pi containers were left intact. Seven public HTTPS browser tests passed, covering login/logout, desktop/mobile library drafts, timeline browsing, downloads and WebGL/PNG views. The library is a bundled reference catalog with explicit chat drafts, not automatic component instantiation. The previous web image is retained as `localhost/3d-pi-cad:before-workbench` for rollback.
 
+### Refined CAD tools and shared tree
+
+Source checkpoint `3264927` upgrades the API, gateway and persistent pi agent together. Fifteen CAD tools expose live limits, revision/feature/part/interface trees, component inspection, focused diagnostics and explicit cancellation/idempotent retries. The model browser consumes the same tree endpoints. No geometry was published by the upgrade; all pre-upgrade stored state was checked unchanged. The real web agent successfully called capabilities, inspect and tree in a read-only smoke turn.
+
+Verification: 97 backend tests, four bridge/credential tests, the actual pi loader integration exercising all 15 CAD tools against isolated data, and eight public HTTPS browser tests passed. Prior images are retained as `localhost/3d-pi-{cad,web,agent}:before-tool-refinement`. See [tool contracts](agent-tools.md) for semantics and limitations.
+
 ## Validation commands
 
 ```sh
