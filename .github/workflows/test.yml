@@ -1,0 +1,35 @@
+name: Test
+on: [push, pull_request]
+jobs:
+  local-mvp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: uv sync --locked
+      - run: uv run ruff check cad tests && uv run ruff format --check cad tests
+      - run: uv run pytest -q
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+      - run: npm ci && npm run build && npx playwright install --with-deps chromium
+        working-directory: web
+      - name: Start isolated test service
+        run: |
+          CAD_DATA_DIR="$RUNNER_TEMP/cad-data" uv run python -m cad.cli serve > "$RUNNER_TEMP/cad.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8765/api/health && exit 0
+            sleep 1
+          done
+          exit 1
+      - run: npm test
+        working-directory: web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: viewer-test-results
+          path: web/test-results/

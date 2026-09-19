@@ -1,0 +1,23 @@
+[project]
+name = "three-d-pi"
+version = "0.1.0"
+description = "Local agent-native parametric CAD service"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "build123d==0.11.1",
+  "fastapi==0.141.1",
+  "starlette==1.6.0",
+  "uvicorn[standard]==0.53.0",
+  "matplotlib==3.11.2",
+  "pymeshlab==2025.7.post1",
+  "trimesh==4.6.8",
+]
+
+[dependency-groups]
+dev = ["pytest==8.3.5", "httpx==0.28.1", "trimesh==4.6.8", "networkx==3.4.2", "lxml==5.4.0", "ruff==0.11.10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
