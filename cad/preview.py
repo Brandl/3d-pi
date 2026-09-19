@@ -70,6 +70,23 @@ def inspect(revision: str):
     }
 
 
+@app.get("/api/revisions/{revision}/tree")
+def assembly_tree(revision: str):
+    from cad.introspection import tree
+
+    return tree(published(revision))
+
+
+@app.get("/api/revisions/{revision}/components/{component_id}")
+def component_inspect(revision: str, component_id: str):
+    from cad.introspection import component
+
+    try:
+        return component(published(revision), component_id)
+    except KeyError:
+        raise HTTPException(404, "Unknown component ID") from None
+
+
 @app.api_route("/api/revisions/{revision}/artifacts/{filename}", methods=["GET", "HEAD"])
 @app.api_route("/downloads/{revision}/{filename}", methods=["GET", "HEAD"])
 def artifact(revision: str, filename: str, request: Request):

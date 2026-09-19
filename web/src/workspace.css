@@ -1,4 +1,10 @@
 /* CAD-workbench layout: command ribbon, browser, canvas, history and agent. */
+.assembly-node {margin:5px 0 5px 7px;border-left:1px solid #344354;padding-left:7px;}
+.assembly-node button {text-align:left;width:100%;padding:6px;overflow-wrap:anywhere;}
+.assembly-node summary {padding:6px 0;overflow-wrap:anywhere;}
+#component-inspector h3 {font-size:13px;margin-top:16px;}
+#component-inspector pre {font-size:10px;max-height:250px;overflow:auto;background:#101720;padding:8px;}
+#component-inspector p {overflow-wrap:anywhere;}
 header {height:48px;padding:0 18px;background:#101822;}
 .brand strong {font-size:18px;}
 .command-ribbon {height:64px;display:flex;align-items:center;gap:10px;padding:8px 18px;background:#1b2735;border-bottom:1px solid #344354;overflow-x:auto;}

@@ -30,6 +30,11 @@ jobs:
             sleep 1
           done
           exit 1
+      - name: Exercise CAD tools through the pi extension loader
+        run: node scripts/test-pi.mjs
+        env:
+          PI_PACKAGE_DIR: ${{ github.workspace }}/agent/node_modules/@earendil-works/pi-coding-agent
+          CAD_URL: http://127.0.0.1:8765
       - run: npm test
         working-directory: web
       - uses: actions/upload-artifact@v4

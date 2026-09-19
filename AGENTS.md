@@ -4,12 +4,13 @@ This project is a local agent-driven CAD application. All geometry changes go th
 
 ## Modeling workflow
 
-1. `cad_inspect` to get the current published document and generation.
-2. For new models, use `cad_schema` and `cad_example` to learn the declarative JSON format.
+1. `cad_inspect` for a compact current-state summary and generation; use `view="document"` for editable source or `view="history"` for paginated publications/builds. Explicit revision IDs never change the published selection.
+2. Read `cad_capabilities` for live service limits and `cad_tree` / `cad_component_inspect` for part/feature/mating context. Parameter consumers are conservative source-scope references, not independently editable component instances. For new models, use `cad_schema` and `cad_example`.
 3. `cad_build` with a complete JSON document, or `cad_parameters` for existing parameter changes. Both create candidates without publishing.
-4. Use `cad_measure` / `cad_validate` and `cad_render` to inspect the exact candidate revision. Check requested dimensions and intent; kernel validity alone is not proof of design correctness.
+4. Use `cad_measure` (optionally one part), `cad_validate` (summary, checks, mesh, exports, assembly or all) and `cad_render` to inspect the exact candidate. Check requested dimensions and intent; kernel validity is not proof of design correctness or physical strength. Mesh measurements are not exact B-rep measurements.
 5. `cad_publish` only after verification, using the generation read before building. The browser then updates automatically.
-6. `cad_export` returns revision-bound links; DXF requires a named section. `cad_restore` selects a previously published revision without deleting history.
+6. `cad_export` without a format lists available files; with a format it returns revision-bound links. Internal loopback links are not public URLs; use the authenticated website-relative path for users. DXF requires a named section. `cad_restore` explicitly republishes a previously published revision without deleting history.
+7. `wait=false` submits a build for polling with `cad_inspect`; `cad_cancel` stops an unfinished candidate, not publications. If submission is uncertain, reuse its request key with identical input, or inspect history. Do not duplicate work with fresh keys while a known build is still running.
 
 If a build fails, inspect its diagnostics. Never silently change a user's requested dimensions to make a build succeed. Stale-generation errors mean inspect again, reconcile the change, and rebuild. Do not bypass the API by editing the SQLite database or artifacts.
 

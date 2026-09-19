@@ -62,18 +62,9 @@ def build(doc: Document, surface) -> Tooling:
         for name in type(config).model_fields
         if name != "profile"
     }
-    limits = {
-        "plaster_clearance": (5, 60),
-        "wall_thickness": (1.5 if doc.captured_base else 2, 10),
-        "top_clearance": (0, 60),
-        "rail_depth": (4, 15),
-        "rail_half_width": (4, 15),
-        "rail_top_margin": (5, 30),
-        "rail_bottom_chamfer": (0, 6),
-        "lock_wall": (1.5, 6),
-        "lock_clearance": (0.15, 1),
-        "lock_length": (20, 150),
-    }
+    from cad.limits import CASTING_BOX_LIMITS
+
+    limits = {**CASTING_BOX_LIMITS, "wall_thickness": (1.5 if doc.captured_base else 2, 10)}
     for key, (lo, hi) in limits.items():
         if not lo <= p[key] <= hi:
             raise ValueError(f"Casting box {key} must be in {lo}..{hi} mm")

@@ -65,7 +65,7 @@ Without `--publish`, `build` only creates a candidate. The demo command explicit
 - WebSocket-driven browser updates, reconnect recovery, CAD edge overlays, and preservation of the last published geometry on failure.
 - STEP, STL, 3MF, and named XY-section DXF exports bound to exact revisions.
 - Revision-bound isometric, top, and front PNG inspection images.
-- Eleven native pi tools: `cad_schema`, `cad_example`, `cad_inspect`, `cad_build`, `cad_parameters`, `cad_measure`, `cad_validate`, `cad_render`, `cad_publish`, `cad_restore`, `cad_export`.
+- Fifteen native pi tools: `cad_capabilities`, `cad_schema`, `cad_example`, `cad_inspect`, `cad_tree`, `cad_component_inspect`, `cad_build`, `cad_parameters`, `cad_cancel`, `cad_measure`, `cad_validate`, `cad_render`, `cad_publish`, `cad_restore`, `cad_export`. See [tool contracts](docs/agent-tools.md).
 
 ## Analytic example: B-01 Gentle Twist
 

@@ -1,4 +1,5 @@
 import './workspace.css';
+import './assembly-tree';
 import { openLibrary } from './library';
 
 const main = document.querySelector('main')!;

@@ -181,6 +181,27 @@ def create_app(data_dir: Path | None = None):
     def schema():
         return Document.model_json_schema()
 
+    @app.get("/api/capabilities")
+    def capabilities():
+        from cad.limits import capabilities as describe
+
+        return describe()
+
+    @app.get("/api/revisions/{revision}/tree")
+    def assembly_tree(revision: str):
+        from cad.introspection import tree
+
+        return tree(store.get(revision))
+
+    @app.get("/api/revisions/{revision}/components/{component_id}")
+    def component_inspect(revision: str, component_id: str):
+        from cad.introspection import component
+
+        try:
+            return component(store.get(revision), component_id)
+        except KeyError:
+            raise HTTPException(404, "Unknown component ID; use the revision tree") from None
+
     @app.get("/api/example")
     def example():
         return json.loads((ROOT / "examples" / "enclosure.json").read_text(encoding="utf-8"))
