@@ -16,10 +16,18 @@ type Preview = {
     exploded_offset?: number[];
   }[];
 };
+type Publication = {
+  generation: number;
+  revision: string;
+  operation: string;
+  created?: number;
+  name?: string | null;
+};
 type State = {
   revision: string | null;
   generation: number;
   history: { id: string; status: string }[];
+  publications?: Publication[];
 };
 type Part = {
   x: number;
@@ -364,22 +372,97 @@ let loading: string | null = null;
 let generation = -1;
 let latest: State;
 let loadError = "";
+function versionFromUrl(): number | null {
+  const value = Number(new URL(location.href).searchParams.get("version"));
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+let selectedVersion = versionFromUrl();
+let timeline: Publication[] = [];
+let timelineKey = "";
+let selectionWarning = "";
+const timelinePosition = $("timeline-position") as HTMLInputElement;
+function chooseVersion(version: number | null) {
+  selectedVersion = version;
+  selectionWarning = "";
+  loadError = "";
+  const url = new URL(location.href);
+  if (version === null) url.searchParams.delete("version");
+  else url.searchParams.set("version", String(version));
+  history.replaceState(null, "", url);
+  if (latest) void update(latest);
+}
+function timelineIndex() {
+  return selectedVersion === null ? timeline.length - 1 : timeline.findIndex(p => p.generation === selectedVersion);
+}
+$("timeline-previous").addEventListener("click", () => {
+  const entry = timeline[timelineIndex() - 1];
+  if (entry) chooseVersion(entry.generation);
+});
+$("timeline-next").addEventListener("click", () => {
+  const entry = timeline[timelineIndex() + 1];
+  if (entry) chooseVersion(entry.generation);
+});
+$("timeline-latest").addEventListener("click", () => chooseVersion(null));
+timelinePosition.addEventListener("input", () => {
+  const entry = timeline[Number(timelinePosition.value)];
+  if (entry) chooseVersion(entry.generation);
+});
+window.addEventListener("popstate", () => {
+  selectedVersion = versionFromUrl();
+  selectionWarning = "";
+  if (latest) void update(latest);
+});
+function renderTimeline(state: State) {
+  timeline = [...(state.publications ?? (state.revision ? [{
+    generation: state.generation, revision: state.revision, operation: "publish",
+  }] : []))].sort((a,b) => a.generation-b.generation);
+  if (selectedVersion !== null && !timeline.some(p => p.generation === selectedVersion)) {
+    selectionWarning = `Version ${selectedVersion} is unavailable; showing latest. `;
+    selectedVersion = null;
+  }
+  const index = timelineIndex();
+  const entry = timeline[index];
+  desired = entry?.revision ?? state.revision;
+  const key = JSON.stringify(timeline);
+  if (key !== timelineKey) {
+    timelineKey = key;
+    $("history").replaceChildren();
+    for (const publication of [...timeline].reverse()) {
+      const item = document.createElement("li");
+      item.dataset.version = String(publication.generation);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `v${publication.generation} · ${publication.name || publication.revision.slice(0,8)}`;
+      const meta = document.createElement("small");
+      meta.textContent = `${publication.operation === "restore" ? "Restored · " : ""}${publication.revision.slice(0,8)}${publication.created ? " · " + new Date(publication.created * 1000).toLocaleString() : ""}`;
+      button.append(meta);
+      button.addEventListener("click", () => chooseVersion(publication.generation));
+      item.append(button);
+      $("history").append(item);
+    }
+  }
+  for (const item of Array.from($("history").querySelectorAll<HTMLLIElement>("li"))) {
+    const selected = Number(item.dataset.version) === entry?.generation;
+    item.classList.toggle("current", selected);
+    item.querySelector("button")!.setAttribute("aria-pressed", String(selected));
+  }
+  timelinePosition.max = String(Math.max(0, timeline.length-1));
+  timelinePosition.value = String(Math.max(0, index));
+  timelinePosition.disabled = timeline.length < 2;
+  timelinePosition.setAttribute("aria-valuetext", entry ? `Version ${entry.generation}: ${entry.name || entry.revision.slice(0,8)}` : "No published versions");
+  ($("timeline-previous") as HTMLButtonElement).disabled = index <= 0;
+  ($("timeline-next") as HTMLButtonElement).disabled = index < 0 || index >= timeline.length-1;
+  ($("timeline-latest") as HTMLButtonElement).disabled = selectedVersion === null;
+  const status = selectionWarning + (entry
+    ? selectedVersion === null ? `Following latest · v${entry.generation}` : `Viewing v${entry.generation} · pinned · latest is v${state.generation}`
+    : "No published versions.");
+  if ($("timeline-status").textContent !== status) $("timeline-status").textContent = status;
+}
 async function update(state: State) {
   if (state.generation < generation) return;
   latest = state;
   generation = state.generation;
-  desired = state.revision;
-  $("history").replaceChildren();
-  for (const row of state.history.slice(0, 12)) {
-    const item = document.createElement("li");
-    if (row.id === state.revision) item.className = "current";
-    const name = document.createElement("span");
-    name.textContent = row.id.slice(0, 8);
-    const status = document.createElement("span");
-    status.textContent = row.id === state.revision ? "published" : row.status;
-    item.append(name, status);
-    $("history").append(item);
-  }
+  renderTimeline(state);
   const building = state.history.filter((row) =>
     ["queued", "building"].includes(row.status),
   );
@@ -426,7 +509,7 @@ async function update(state: State) {
     viewport.dataset.revision = id;
     if (!renderer) updateFallbackImage(id);
   } catch (error) {
-    loadError = `Unable to load preview; keeping last good model. ${String(error)}`;
+    if (desired === id) loadError = `Unable to load preview; keeping last good model. ${String(error)}`;
   } finally {
     if (loading === id) loading = null;
     $("notice").textContent =

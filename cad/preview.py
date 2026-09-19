@@ -45,6 +45,13 @@ def state():
         "revision": data["revision"],
         "generation": data["generation"],
         "history": [{"id": data["revision"], "status": "ready"}] if data["revision"] else [],
+        "publications": [
+            {
+                key: item.get(key)
+                for key in ("generation", "revision", "operation", "created", "name")
+            }
+            for item in data["publications"]
+        ],
     }
 
 

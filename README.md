@@ -240,6 +240,14 @@ There is no automatic artifact cleanup or retention limit. History responses sho
 
 See `todo.md` and `milestones.md` for the longer-term plan and current progress. This is a working vertical slice, not completion of every roadmap item.
 
+## History and checkpoints
+
+The viewer's **Design timeline** lets you step Previous/Next, scrub through published versions, choose a named version, or return to **Latest**. Selected historical versions stay pinned even when a newer design is published; the `?version=<generation>` URL preserves the selection on reload. Geometry, parameters and downloads all follow the viewed revision. Browsing does not restore or publish anything—ask the agent to restore a version when you want to make it current.
+
+Application code, tests, documentation and parametric examples are tracked in local Git. `cad-prototype-v0` tags the working prototype before the workspace migration. Commit verified milestones regularly. The CAD timeline is publication history, not the application Git log: existing pre-Git revisions have not been retroactively presented as commits. Project-level source-commit provenance is planned in [the workspace plan](docs/workspace-plan.md).
+
+Runtime databases and generated artifacts are deliberately excluded from Git and still need backups. A Git checkout alone does not restore runtime data; inspecting old code in a separate worktree avoids changing a running service. No Git remote is configured automatically.
+
 ## Temporary read-only preview gateway
 
 For a public demonstration, tunnel **only the read-only gateway**, not the modeling service:

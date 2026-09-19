@@ -77,6 +77,14 @@ If a build fails, inspect its diagnostics. Never silently change a user's reques
 - `examples/gentle-twist-chamfered-form.json` uses 3 mm rail ramps and a 2 mm plaster former.
 - The later confirmed `examples/gentle-twist-cutting-neck.json` adds a 5 mm narrow-tip extension via `solid_master.tip_extension`, `tip_transition`, `tip_radius`: 3 mm C1 Hermite blend plus 2 mm straight Ø28 mm neck. Validate monotone taper and endpoint normals; do not mirror the source flutes or leave an internal cap at the old end. Unchanged walls now leave 15 mm plaster cover.
 
+## Git checkpoints and design history
+
+- This directory is now a Git repository. Commit small, verified milestones regularly, including code, tests, documentation and changed parametric example/source documents. Make a checkpoint before substantial refactors or deployment migrations; use descriptive commit messages.
+- Do not commit credentials, sessions, runtime SQLite databases, generated CAD artifacts, caches or dependencies. Do not push anywhere without an explicitly configured/approved remote.
+- Preserve published history: do not rewrite prior commits or use a destructive reset to implement a model restore. Inspect older code with `git show` or a separate worktree. A Git checkout does not roll back the runtime CAD database.
+- The browser timeline is the CAD publication history, not the application's Git commit log. Browsing or scrubbing it only changes the viewed revision; it must never publish/restore or mutate geometry. Historical downloads must reference the selected immutable revision. Returning to Latest resumes following new publications.
+- Existing pre-Git model history is retained as CAD revisions; do not pretend it consists of historical Git commits. Project-scoped Git source snapshots/provenance are a planned workspace feature.
+
 ## Development
 
 - `uv sync --locked`; `cd web && npm ci && npm run build`.

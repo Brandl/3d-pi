@@ -74,7 +74,9 @@ class Store:
             ]
             state["publications"] = [
                 dict(r)
-                for r in db.execute("SELECT * FROM publications ORDER BY generation DESC LIMIT 100")
+                for r in db.execute("""SELECT p.*, json_extract(r.document, '$.name') AS name
+                    FROM publications p JOIN revisions r ON r.id=p.revision
+                    ORDER BY p.generation DESC""")
             ]
             return state
 

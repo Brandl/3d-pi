@@ -22,6 +22,22 @@
           <span id="revision">No published revision</span
           ><span class="badge">mm · Z-up</span>
         </div>
+        <section aria-label="Design timeline">
+          <h2>Design timeline</h2>
+          <div class="timeline-controls">
+            <button id="timeline-previous" disabled>Previous</button>
+            <button id="timeline-next" disabled>Next</button>
+            <button id="timeline-latest" disabled>Latest</button>
+          </div>
+          <label class="sr-only" for="timeline-position">Published version</label>
+          <input id="timeline-position" type="range" min="0" max="0" value="0" step="1" disabled />
+          <p id="timeline-status" class="hint" role="status">No published versions.</p>
+          <details>
+            <summary>Choose a version</summary>
+            <ol id="history"></ol>
+          </details>
+          <p class="hint">Browsing only—does not restore or change the saved model.</p>
+        </section>
         <section>
           <h2>Parts <span id="part-count"></span></h2>
           <div id="parts" class="stack">
@@ -43,10 +59,6 @@
           <p id="export-count" class="hint" role="status"></p>
           <div id="exports" class="exports"></div>
           <p class="hint">DXF uses named XY sections, not a 3D conversion.</p>
-        </section>
-        <section>
-          <h2>Build history</h2>
-          <ol id="history"></ol>
         </section>
       </aside>
       <div id="viewport">
