@@ -203,6 +203,21 @@ def render(mesh, destination: Path, views=None, *, review=False):
         ax.set_box_aspect((1, 1, 1), zoom=1.6 if review else 1)
         ax.set_proj_type("ortho")
         ax.view_init(elev=elev, azim=azim)
+        if review:
+            # Cap the closer inspection framing using projected vertices so
+            # bulky/diagonal assemblies cannot be cropped by the axes viewport.
+            from mpl_toolkits.mplot3d import proj3d
+
+            px, py, _ = proj3d.proj_transform(*all_vertices.T, ax.get_proj())
+            window = ax.bbox.transformed(ax.transData.inverted())
+            factors = []
+            for values, lo, hi in ((px, window.x0, window.x1), (py, window.y0, window.y1)):
+                if values.min() < -1e-12:
+                    factors.append(lo / values.min())
+                if values.max() > 1e-12:
+                    factors.append(hi / values.max())
+            if factors:
+                ax.set_box_aspect((1, 1, 1), zoom=1.6 * min(1.0, 0.9 * min(factors)))
         ax.set_axis_off()
         ax.set_title(f"{'REVIEW · ' if review else ''}{view.upper()} · millimeters", color="white")
         if review:
