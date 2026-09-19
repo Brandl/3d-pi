@@ -105,6 +105,12 @@ Source checkpoint `3264927` upgrades the API, gateway and persistent pi agent to
 
 Verification: 97 backend tests, four bridge/credential tests, the actual pi loader integration exercising all 15 CAD tools against isolated data, and eight public HTTPS browser tests passed. Prior images are retained as `localhost/3d-pi-{cad,web,agent}:before-tool-refinement`. See [tool contracts](agent-tools.md) for semantics and limitations.
 
+### Automatic visual checkpoints
+
+Source `1053c1f` adds automatic multi-view image tool results, separate named-colour review PNGs, legacy-image fallback, bounded delivery, compaction reset and an explicit pause for unseen publish/restore checkpoints. `fdcc09c` caps closer inspection framing using projected vertices so bulky assemblies remain inside the viewport. See [visual-review semantics](visual-review.md); hidden-line/dotted occlusion rendering is still planned.
+
+The real persistent agent received four image blocks from a default `cad_inspect` call and described the visible assembly without building or publishing. Its saved tool result was checked for all four actual images. Full backend suite: 99 tests passed before the framing follow-up; nine targeted rendering/geometry tests passed afterward, including projected-cube containment. The actual pi-loader integration covers automatic images, compaction reset, pre-publication pausing, legacy fallback and missing-image handling. Pre-upgrade CAD state remained unchanged. Prior service images are retained under `:before-visual-checkpoints`.
+
 ## Validation commands
 
 ```sh
