@@ -95,6 +95,10 @@ At source checkpoint `49613c8`, staging used a separate copy on ports 8875/8877 
 
 A real containerized pi turn called `cad_inspect` successfully. Conversation/request state survived container recreation. Login/logout and protected chat were checked in a real browser; all five public HTTPS Playwright tests passed, including timeline browsing, historical downloads and PNG/WebGL fallbacks. Backend: 91 tests; agent bridge/credentials: four tests. All three container health checks passed. Initial built image IDs: CAD `55ab01cff1bf`, agent `1138c66f5af6`.
 
+### Workbench UI update
+
+Source checkpoint `d93b44b` adds the CAD command ribbon/model browser/bottom timeline and component reference UI. Only the web container was replaced (image `2f8edd7f08c0`); the running CAD and pi containers were left intact. Seven public HTTPS browser tests passed, covering login/logout, desktop/mobile library drafts, timeline browsing, downloads and WebGL/PNG views. The library is a bundled reference catalog with explicit chat drafts, not automatic component instantiation. The previous web image is retained as `localhost/3d-pi-cad:before-workbench` for rollback.
+
 ## Validation commands
 
 ```sh
