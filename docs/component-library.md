@@ -1,6 +1,6 @@
 # Reusable component library
 
-Status: requested product scope / implementation plan. No component catalog or insertion UI is deployed yet.
+Status: the initial reference-library UI is implemented in `web/src/library.ts`: searchable slide-lock and captured-floor entries with draft parameters, instructions, source snapshots and validation notes. It can prepare an explicit pi chat draft, but does not insert geometry or publish. Entries are bundled with the application, not yet a persistent/versioned catalog. Released components, project-scoped instances and generator extraction below remain planned.
 
 ## Purpose
 

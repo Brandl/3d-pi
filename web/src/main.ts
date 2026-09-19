@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import "./style.css";
 import './chat';
+import './workspace';
 
 type Preview = {
   parts: {
@@ -208,7 +209,7 @@ document
   .forEach((button) => (button.onclick = () => view(button.dataset.view!)));
 $("fit").onclick = () => view(currentView);
 window.addEventListener("keydown", (event) => {
-  if (event.ctrlKey || event.metaKey || event.altKey ||
+  if (document.querySelector('dialog[open]') || event.ctrlKey || event.metaKey || event.altKey ||
       (event.target instanceof HTMLElement && (event.target.matches('input, textarea, select') || event.target.isContentEditable))) return;
   const views: Record<string, string> = {
     "1": "iso",

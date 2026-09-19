@@ -1,5 +1,6 @@
 FROM docker.io/library/node:24-alpine@sha256:333f6b3eca25980d5682c26207665b93c9417786b21760b2764d5821d9704c8a AS viewer
-WORKDIR /build
+WORKDIR /build/web
+COPY cad/casting_box.py cad/captured_base.py /build/cad/
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY web/ ./
@@ -13,7 +14,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY cad/ ./cad/
 COPY examples/ ./examples/
-COPY --from=viewer /build/dist ./web/dist
+COPY --from=viewer /build/web/dist ./web/dist
 RUN useradd --uid 1000 --create-home cad && chmod -R a+rX /opt/cad
 ENV PATH="/opt/cad/.venv/bin:$PATH" CAD_DATA_DIR=/data PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 USER 1000:1000

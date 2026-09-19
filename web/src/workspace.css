@@ -1,0 +1,90 @@
+/* CAD-workbench layout: command ribbon, browser, canvas, history and agent. */
+header {height:48px;padding:0 18px;background:#101822;}
+.brand strong {font-size:18px;}
+.command-ribbon {height:64px;display:flex;align-items:center;gap:10px;padding:8px 18px;background:#1b2735;border-bottom:1px solid #344354;overflow-x:auto;}
+.workspace-label {font-size:12px;font-weight:700;letter-spacing:1.5px;color:#83dbc9;border-right:1px solid #405162;padding:12px 20px 12px 0;}
+.command-ribbon nav {position:static;flex-wrap:nowrap;flex-shrink:0;}
+.command-ribbon>button {white-space:nowrap;min-height:36px;}
+main {height:calc(100dvh - 112px);grid-template-columns:260px minmax(200px,1fr);grid-template-rows:minmax(0,1fr) 156px;}
+.agent-enabled main {grid-template-columns:260px minmax(200px,1fr) 340px;grid-template-rows:minmax(0,1fr) 156px;height:calc(100dvh - 112px);}
+aside {grid-column:1;grid-row:1 / 3;padding:18px;}
+.browser-heading {padding-bottom:16px;border-bottom:1px solid #344354;color:#c6d6e5;}
+aside h1 {font-size:18px;line-height:1.4;}
+aside .subtext {font-size:11px;}
+aside section {margin-top:20px;padding-top:18px;}
+.part {padding:10px;}
+#viewport {grid-column:2;grid-row:1;min-height:0;}
+#notice {top:18px;}
+#chat-panel {grid-column:3;grid-row:1 / 3;}
+#design-timeline {grid-column:2;grid-row:2;margin:0;padding:12px 20px;border-top:1px solid #344354;background:#17222e;position:relative;}
+#design-timeline h2 {display:inline-block;margin:0 16px 0 0;}
+#design-timeline .timeline-controls {display:inline-flex;vertical-align:middle;}
+#design-timeline .timeline-controls button {flex:initial;}
+#timeline-position {margin-top:10px;}
+#timeline-status {margin:4px 0;}
+#design-timeline>details {position:absolute;right:20px;top:22px;z-index:5;}
+#design-timeline>details[open] {top:auto;bottom:96px;padding:16px;width:min(390px,90%);border:1px solid #52677b;border-radius:8px;background:#1b2a39;box-shadow:0 8px 32px #0008;}
+#design-timeline>details[open] summary {margin-bottom:10px;}
+#design-timeline>.hint {margin:2px 0;font-size:10px;}
+#component-library {padding:0;border:1px solid #4d6378;border-radius:10px;width:min(1120px,94vw);max-width:94vw;height:min(830px,90dvh);max-height:90dvh;background:#141e2a;color:#dfebf5;box-shadow:0 24px 100px #000a;}
+#component-library[open] {display:grid;grid-template-rows:auto minmax(0,1fr);}
+#component-library::backdrop {background:#070c13b8;backdrop-filter:blur(3px);}
+.library-heading {display:flex;align-items:center;gap:18px;padding:18px 22px;background:#1b2a39;border-bottom:1px solid #35475a;}
+.library-heading h2 {margin:0;font-size:15px;color:#e4eef5;}
+.library-heading span {font-size:12px;color:#9eb2c5;flex:1;}
+.library-layout {display:grid;grid-template-columns:270px minmax(0,1fr);min-height:0;}
+.library-catalog {padding:18px;border-right:1px solid #344354;overflow-y:auto;}
+.library-catalog input,.component-parameter input,.component-actions textarea {background:#101720;color:#e3edf6;border:1px solid #496074;border-radius:5px;padding:10px;font:inherit;max-width:100%;box-sizing:border-box;}
+.library-catalog input {width:100%;font-size:13px;}
+.component-list {display:grid;gap:12px;margin-top:18px;}
+.component-card {text-align:left;padding:15px;display:grid;gap:10px;}
+.component-card strong {font-size:14px;}
+.component-card small {color:#a9bdcf;}
+.component-card[aria-pressed="true"],.component-tabs button[aria-pressed="true"] {border-color:#81d6c5;background:#233e45;color:#a5e5d9;}
+.reference-badge {font-size:10px;color:#edc78e;}
+.component-detail {padding:24px;overflow-y:auto;min-width:0;}
+.component-detail h3 {font-size:25px;margin:0 0 12px;}
+.component-detail p {line-height:1.6;font-size:13px;}
+.reference-note {border-left:3px solid #c9a369;padding:10px 14px;background:#292b2d;color:#e3c79f;}
+.component-tabs {display:flex;gap:8px;flex-wrap:wrap;padding:14px 0;border-bottom:1px solid #344354;}
+.component-panel {min-height:230px;padding-top:18px;}
+.component-panel h4 {margin:0 0 12px;}
+.component-panel dl {margin:16px 0;}
+.component-parameter {display:grid;grid-template-columns:1fr 110px;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid #293848;}
+.component-parameter strong {font-size:13px;font-weight:500;}
+.component-parameter small {grid-column:1 / -1;font-size:11px;color:#a0b3c4;line-height:1.5;}
+.component-steps {list-style:decimal;padding-left:24px;}
+.component-steps li {display:list-item;color:#c4d3e1;line-height:1.7;font-size:13px;padding:6px;}
+.component-panel pre {overflow:auto;max-height:360px;background:#0e1721;padding:16px;border-radius:6px;tab-size:4;}
+.component-panel code {font-size:11px;}
+.component-actions {margin-top:22px;padding-top:18px;border-top:1px solid #344354;}
+.component-actions button {margin-right:8px;}
+.component-actions textarea {width:100%;font-size:12px;resize:vertical;}
+@media(max-width:1100px) {
+ main,.agent-enabled main {grid-template-columns:230px minmax(180px,1fr);grid-template-rows:55vh 156px;height:auto;}
+ .agent-enabled main {grid-template-rows:55vh 156px 450px;}
+ .agent-enabled #chat-panel {grid-column:1 / -1;grid-row:3;min-height:0;}
+ #design-timeline>details {top:auto;bottom:10px;}
+ #design-timeline>.hint {max-width:65%;}
+ .library-layout {grid-template-columns:220px minmax(0,1fr);}
+}
+@media(max-width:600px) {
+ main,.agent-enabled main {grid-template-columns:minmax(0,1fr);grid-template-rows:50vh 175px auto;height:auto;}
+ .agent-enabled main {grid-template-rows:50vh 175px 450px auto;}
+ #viewport {grid-column:1;grid-row:1;min-height:280px;}
+ #design-timeline {grid-column:1;grid-row:2;padding:12px;}
+ aside,.agent-enabled aside {grid-column:1;grid-row:4;max-height:none;}
+ #chat-panel,.agent-enabled #chat-panel {grid-column:1;grid-row:3;}
+ #design-timeline h2 {display:block;margin-bottom:8px;}
+ .library-heading {padding:14px;gap:10px;}
+ .library-heading span {font-size:10px;}
+ .library-layout {grid-template-columns:minmax(0,1fr);grid-template-rows:170px minmax(0,1fr);}
+ .library-catalog {border-right:0;border-bottom:1px solid #344354;padding:12px;}
+ .library-catalog>.hint {display:none;}
+ .component-list {display:flex;gap:10px;margin-top:10px;}
+ .component-card {flex:1;padding:9px;gap:5px;}
+ .component-card strong {font-size:12px;}
+ .component-card small {display:none;}
+ .component-detail {padding:16px;}
+ .component-detail h3 {font-size:22px;}
+}

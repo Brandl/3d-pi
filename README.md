@@ -252,6 +252,8 @@ Runtime databases and generated artifacts are deliberately excluded from Git and
 
 The gateway now **fails closed without a configured password**. Every preview, artifact, asset, WebSocket and agent endpoint requires authentication. The website includes a persistent pi conversation; authenticated prompts can change models through pi's CAD tools. This is a single trusted owner's interface, not anonymous sharing or multi-user accounts.
 
+The CAD-workbench layout includes a command ribbon, model browser, central viewport, bottom publication timeline and pi side panel. **Components** opens the reference library: slide-lock and captured-floor instructions, draft parameters, implementation source and validation notes. Preparing a request only drafts a message for pi; it never inserts or publishes geometry automatically. Persistent component releases/instances and project navigation remain planned; see [component-library scope](docs/component-library.md).
+
 See [container deployment, credentials, backups and rollback](docs/container-deployment.md). For gateway-only development:
 
 ```sh

@@ -1,0 +1,42 @@
+import './workspace.css';
+import { openLibrary } from './library';
+
+const main = document.querySelector('main')!;
+const timeline = document.querySelector<HTMLElement>('section[aria-label="Design timeline"]')!;
+timeline.id = 'design-timeline';
+main.append(timeline);
+const ribbon = document.createElement('div');
+ribbon.className = 'command-ribbon';
+ribbon.setAttribute('aria-label', 'Workspace commands');
+const workspace = document.createElement('div');
+workspace.className = 'workspace-label';
+workspace.textContent = 'DESIGN';
+ribbon.append(workspace);
+const cameras = document.querySelector<HTMLElement>('nav[aria-label="Camera controls"]')!;
+ribbon.append(cameras);
+const library = document.createElement('button');
+library.id = 'open-components';
+library.textContent = '▦  Components';
+library.addEventListener('click', openLibrary);
+ribbon.append(library);
+const parameters = document.createElement('button');
+parameters.textContent = 'ƒx  Parameters';
+parameters.addEventListener('click', () => {
+  const panel = document.getElementById('parameters')!;
+  panel.scrollIntoView({block: 'center', behavior: 'smooth'});
+  panel.tabIndex = -1;
+  panel.focus({preventScroll: true});
+});
+ribbon.append(parameters);
+const exportsButton = document.createElement('button');
+exportsButton.textContent = '↓  Export';
+exportsButton.addEventListener('click', () => {
+  document.getElementById('export-type')!.scrollIntoView({block: 'center', behavior: 'smooth'});
+  document.getElementById('export-type')!.focus({preventScroll: true});
+});
+ribbon.append(exportsButton);
+main.before(ribbon);
+const browserLabel = document.createElement('h2');
+browserLabel.className = 'browser-heading';
+browserLabel.textContent = '◫  Model browser';
+document.querySelector('aside')!.prepend(browserLabel);
