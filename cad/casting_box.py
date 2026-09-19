@@ -65,7 +65,7 @@ def build(doc: Document, surface) -> Tooling:
     limits = {
         "plaster_clearance": (5, 60),
         "wall_thickness": (1.5 if doc.captured_base else 2, 10),
-        "top_clearance": (0, 40),
+        "top_clearance": (0, 60),
         "rail_depth": (4, 15),
         "rail_half_width": (4, 15),
         "rail_top_margin": (5, 30),
