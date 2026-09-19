@@ -90,4 +90,7 @@ If a build fails, inspect its diagnostics. Never silently change a user's reques
 - `uv sync --locked`; `cd web && npm ci && npm run build`.
 - `uv run python -m cad.cli serve`; in another terminal `uv run python -m cad.cli demo`.
 - `uv run pytest`; `uv run ruff check cad tests`; `cd web && npm test` (service must be running).
-- The service accepts only bounded declarative documents, not arbitrary generated Python. The worker process has resource limits but is not a security sandbox. Do not expose this service publicly or add code execution without proper OS isolation.
+- The modeling service accepts only bounded declarative documents, not arbitrary generated Python. Never expose its unauthenticated port publicly. The rootless Podman deployment separates CAD, the password-protected gateway and the pi agent; only the gateway may be tunneled.
+- The website is a single-owner command interface, not anonymous sharing. Keep previews, artifacts, sockets and agent operations behind the password gate. Preserve CSRF/origin checks and Secure/HttpOnly cookies. Missing password configuration must fail closed.
+- Provider credentials belong only in the agent container, never its image, source Git, browser or geometry worker. A read-only host credential bridge must never refresh/rotate the host's OAuth tokens. Runtime files and conversation history are private persistent data, not Git source.
+- Pi has command/file tools in its container workspace. This is not an untrusted multi-user sandbox; keep resource limits, capability drops, no-new-privileges and separate writable mounts. Do not mount the Podman socket or entire host home directory.

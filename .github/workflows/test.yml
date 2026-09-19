@@ -8,14 +8,18 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            agent/package-lock.json
       - run: uv sync --locked
       - run: uv run ruff check cad tests && uv run ruff format --check cad tests
       - run: uv run pytest -q
         env:
           OPENBLAS_NUM_THREADS: '1'
+      - run: npm ci --ignore-scripts && npm test
+        working-directory: agent
       - run: npm ci && npm run build && npx playwright install --with-deps chromium
         working-directory: web
       - name: Start isolated test service

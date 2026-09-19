@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import "./style.css";
+import './chat';
 
 type Preview = {
   parts: {
@@ -74,6 +75,7 @@ async function get<T>(url: string): Promise<T> {
       signal: controller.signal,
       cache: "no-store",
     });
+    if (response.status === 401) location.assign('/auth/login?next='+encodeURIComponent(location.pathname+location.search));
     if (!response.ok)
       throw new Error(`HTTP ${response.status}: ${await response.text()}`);
     return await response.json();
@@ -206,7 +208,8 @@ document
   .forEach((button) => (button.onclick = () => view(button.dataset.view!)));
 $("fit").onclick = () => view(currentView);
 window.addEventListener("keydown", (event) => {
-  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.ctrlKey || event.metaKey || event.altKey ||
+      (event.target instanceof HTMLElement && (event.target.matches('input, textarea, select') || event.target.isContentEditable))) return;
   const views: Record<string, string> = {
     "1": "iso",
     "2": "top",

@@ -101,7 +101,7 @@ class PasswordMiddleware:
                 security = [
                     (b"cache-control", b"no-store"),
                     (b"x-content-type-options", b"nosniff"),
-                    (b"referrer-policy", b"no-referrer"),
+                    (b"referrer-policy", b"same-origin"),
                     (b"x-frame-options", b"DENY"),
                     (
                         b"content-security-policy",

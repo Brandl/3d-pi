@@ -158,7 +158,7 @@ This is **one local project per data directory, one service process, one active 
 
 The service binds to loopback, checks Host and Origin, does not enable CORS, accepts no filesystem paths in documents, and exposes only allowlisted artifacts. Worker environment variables are allowlisted; pi credentials are not inherited.
 
-**Do not expose it publicly or bind it to a non-loopback interface.** There is no user authentication, multi-tenant isolation, network namespace, container sandbox, disk quota, or restricted worker filesystem. Native kernel vulnerabilities are still possible. Pi extensions themselves run with pi's permissions, so disabling general tools is a separate concern from geometry-worker isolation.
+**Never expose the modeling API publicly.** It has no user authentication. In the Podman deployment its host port remains loopback-only; the authenticated gateway is the only public entry point. Containers add filesystem/network boundaries and resource limits, but this is a trusted single-owner workspace, not a multi-tenant sandbox or a disk quota system. Native kernel vulnerabilities remain possible. Pi can run commands and edit files inside its own container and mounted workspace.
 
 ## Export semantics
 
@@ -181,7 +181,7 @@ Interactive API docs: http://127.0.0.1:8765/docs
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/state` | Published revision, generation, latest 100 builds/publications |
+| `GET /api/state` | Published revision, generation, latest 100 builds and all publications |
 | `GET /api/schema` | Full document JSON schema |
 | `GET /api/example` | Enclosure document |
 | `POST /api/builds` | `{document, expected_generation, request_key}` → queued revision (202) |
@@ -248,16 +248,19 @@ Application code, tests, documentation and parametric examples are tracked in lo
 
 Runtime databases and generated artifacts are deliberately excluded from Git and still need backups. A Git checkout alone does not restore runtime data; inspecting old code in a separate worktree avoids changing a running service. No Git remote is configured automatically.
 
-## Temporary read-only preview gateway
+## Password-protected website and containerized pi
 
-For a public demonstration, tunnel **only the read-only gateway**, not the modeling service:
+The gateway now **fails closed without a configured password**. Every preview, artifact, asset, WebSocket and agent endpoint requires authentication. The website includes a persistent pi conversation; authenticated prompts can change models through pi's CAD tools. This is a single trusted owner's interface, not anonymous sharing or multi-user accounts.
 
-```bash
-uv run uvicorn cad.preview:app --host 127.0.0.1 --port 8767
+See [container deployment, credentials, backups and rollback](docs/container-deployment.md). For gateway-only development:
+
+```sh
+uv run python -m cad.auth /secure/location/password.json
+CAD_PASSWORD_HASH_FILE=/secure/location/password.json uv run uvicorn cad.preview:app --host 127.0.0.1 --port 8767
 cloudflared tunnel --url http://127.0.0.1:8767
 ```
 
-It exposes published model previews and downloads, not mutation endpoints or unpublished source/builds. Public `/downloads/latest.zip` downloads the current published casting-parts bundle; revision-pinned links use `/downloads/{revision}/{filename}`. File routes support GET, HEAD and byte-range resume with attachment filenames; the latest-bundle alias is not cached. Published-revision allowlisting still applies to every file. Quick Tunnel URLs are public, temporary, and unauthenticated; stop the tunnel after the demonstration. The gateway is not a production hosting/authentication solution. The viewer falls back to HTTP polling if WebSockets are blocked, and to standard-view PNG images if WebGL is unavailable.
+Tunnel **only the gateway**, through HTTPS, never the private modeling API or agent bridge. A Quick Tunnel address is temporary; possession of its URL no longer grants access. `/downloads/latest.zip` and `/downloads/{revision}/{filename}` retain GET/HEAD, ranges and attachment filenames but now require login. The gateway still serves only published artifacts and does not directly proxy CAD mutation routes. Geometry changes go through the authenticated agent. Polling/PNG fallbacks and non-mutating historical browsing remain available.
 
 ## Dependency licensing
 

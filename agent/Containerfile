@@ -1,0 +1,12 @@
+FROM docker.io/library/node:24-alpine@sha256:333f6b3eca25980d5682c26207665b93c9417786b21760b2764d5821d9704c8a
+RUN apk add --no-cache bash git python3 curl
+WORKDIR /opt/agent
+COPY agent/package.json agent/package-lock.json ./
+RUN npm ci --ignore-scripts --omit=dev
+COPY agent/main.mjs agent/server.mjs agent/credentials.mjs agent/health.mjs ./
+COPY .pi/extensions/cad.ts ./cad.ts
+RUN chmod -R a+rX /opt/agent
+ENV PATH="/opt/agent/node_modules/.bin:$PATH" PI_WORKSPACE=/workspace PI_STATE_DIR=/agent-state PI_CODING_AGENT_DIR=/agent-state/pi CAD_URL=http://127.0.0.1:8765 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0
+USER node
+WORKDIR /workspace
+CMD ["node", "/opt/agent/main.mjs"]

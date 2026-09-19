@@ -5,6 +5,7 @@ export default defineConfig({
   timeout: 120000,
   use: {
     baseURL: process.env.CAD_URL ?? "http://127.0.0.1:8765",
+    storageState: process.env.CAD_BROWSER_AUTH,
     viewport: { width: 1440, height: 960 },
     launchOptions: { args: ["--enable-unsafe-swiftshader"] },
   },

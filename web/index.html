@@ -12,6 +12,7 @@
         ><span class="muted">/ CAD observatory</span>
       </div>
       <div id="connection" role="status">Connecting…</div>
+      <button id="logout" hidden>Sign out</button>
     </header>
     <main>
       <aside>
@@ -85,6 +86,17 @@
           ><span id="geometry-status">Waiting for geometry</span>
         </footer>
       </div>
+      <section id="chat-panel" aria-label="Chat with pi" hidden>
+        <div class="chat-heading"><h2>Work with pi</h2><small id="chat-model"></small></div>
+        <div id="chat-messages" aria-label="Conversation"></div>
+        <p id="chat-status" class="hint" role="status">Connecting to pi…</p>
+        <form id="chat-form">
+          <label for="chat-input">Message pi</label>
+          <textarea id="chat-input" rows="4" maxlength="15000" placeholder="Describe a design or ask for a change…" required></textarea>
+          <div class="chat-actions"><button id="chat-send" type="submit">Send</button><button id="chat-stop" type="button" disabled>Stop</button></div>
+        </form>
+        <p class="hint">Pi can edit files and models in its container workspace. Review changes before manufacturing.</p>
+      </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
