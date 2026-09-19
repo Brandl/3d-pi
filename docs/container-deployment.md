@@ -89,6 +89,12 @@ The initial migration retains the original repository's `data/` as a rollback co
 
 To roll back the runtime, stop the tunnel and container pod, start the original CAD service against its original data, and run the **password-protected** gateway with `CAD_PASSWORD_HASH_FILE` configured. Verify anonymous access is blocked before retunneling. Do not restore the old anonymous public gateway.
 
+## Initial deployment verification
+
+At source checkpoint `49613c8`, staging used a separate copy on ports 8875/8877 before cutover to 8765/8767. All 30 publications, 32 original build records and 712 artifact files were preserved; every copied artifact matched byte-for-byte. A fresh, unpublished container build of generation 30's Origami document passed validation and produced five STL files identical to the published originals. Published generation 30 was not changed.
+
+A real containerized pi turn called `cad_inspect` successfully. Conversation/request state survived container recreation. Login/logout and protected chat were checked in a real browser; all five public HTTPS Playwright tests passed, including timeline browsing, historical downloads and PNG/WebGL fallbacks. Backend: 91 tests; agent bridge/credentials: four tests. All three container health checks passed. Initial built image IDs: CAD `55ab01cff1bf`, agent `1138c66f5af6`.
+
 ## Validation commands
 
 ```sh
