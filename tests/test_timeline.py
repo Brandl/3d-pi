@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from cad import preview
+from cad.auth import PasswordGate, COOKIE
 from cad.storage import Store
 
 
@@ -33,7 +34,10 @@ def test_publication_timeline_is_complete_and_does_not_leak_candidates(tmp_path,
         return store.get(path.rsplit("/", 1)[1])
 
     monkeypatch.setattr(preview, "upstream", upstream)
-    with TestClient(preview.app) as client:
+    gate = PasswordGate({"salt": "00" * 16, "hash": "00" * 64})
+    monkeypatch.setattr(preview.app.state, "gate", gate)
+    token, _ = gate.issue()
+    with TestClient(preview.app, base_url="https://testserver", cookies={COOKIE: token}) as client:
         response = client.get("/api/state")
         assert response.status_code == 200
         data = response.json()

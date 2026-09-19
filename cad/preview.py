@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import re
 import urllib.error
 import urllib.request
@@ -11,9 +12,13 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-ORIGIN = "http://127.0.0.1:8765"
+from cad.auth import PasswordGate, PasswordMiddleware
+
+ORIGIN = os.environ.get("CAD_ORIGIN", "http://127.0.0.1:8765")
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.state.gate = PasswordGate.from_env()
+app.add_middleware(PasswordMiddleware, owner=app)
 
 
 def fetch(path):
@@ -150,11 +155,49 @@ def latest_download(request: Request):
     return response
 
 
+def agent_request(operation, body=None):
+    secret_path = os.environ.get("CAD_AGENT_TOKEN_FILE")
+    if not secret_path:
+        raise HTTPException(503, "Web agent is not configured")
+    secret = Path(secret_path).read_text().strip()
+    origin = os.environ.get("CAD_AGENT_ORIGIN", "http://127.0.0.1:8768")
+    request = urllib.request.Request(
+        origin + "/" + operation,
+        data=body,
+        headers={"Authorization": "Bearer " + secret, "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as result:
+            return Response(result.read(), status_code=result.status, media_type="application/json")
+    except urllib.error.HTTPError as exc:
+        return Response(exc.read(), status_code=exc.code, media_type="application/json")
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise HTTPException(503, "Web agent is unavailable") from exc
+
+
+@app.api_route("/api/agent/{operation}", methods=["GET", "POST"])
+async def agent_proxy(operation: str, request: Request):
+    if (request.method, operation) not in {("GET", "state"), ("POST", "prompt"), ("POST", "abort")}:
+        raise HTTPException(404)
+    body = None
+    if request.method == "POST":
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > 32768:
+                raise HTTPException(413, "Prompt too large")
+        body = bytes(data)
+    return await asyncio.to_thread(agent_request, operation, body)
+
+
 @app.websocket("/api/events")
 async def events(socket: WebSocket):
     await socket.accept()
     try:
         while True:
+            if not app.state.gate.session(socket.scope):
+                await socket.close(code=4401)
+                return
             await socket.send_json(await asyncio.to_thread(state))
             await asyncio.sleep(2)
     except (WebSocketDisconnect, RuntimeError, OSError, HTTPException):

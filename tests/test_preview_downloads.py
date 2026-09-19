@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.testclient import TestClient
 
 from cad import preview
+from cad.auth import PasswordGate, COOKIE
 
 REVISION = "a" * 32
 
@@ -70,7 +71,10 @@ def gateway(tmp_path, monkeypatch):
 
     monkeypatch.setattr(preview, "upstream", metadata)
     monkeypatch.setattr(preview.urllib.request, "urlopen", urlopen)
-    with TestClient(preview.app) as client:
+    gate = PasswordGate({"salt": "00" * 16, "hash": "00" * 64})
+    monkeypatch.setattr(preview.app.state, "gate", gate)
+    token, _ = gate.issue()
+    with TestClient(preview.app, base_url="https://testserver", cookies={COOKIE: token}) as client:
         yield client, payload
     origin.close()
 
@@ -109,4 +113,10 @@ def test_only_published_exports_and_no_mutation(gateway):
     client, _ = gateway
     assert client.get(f"/downloads/{'b' * 32}/casting-box.zip").status_code == 404
     assert client.head(f"/downloads/{REVISION}/document.json").status_code == 404
-    assert client.post("/downloads/latest.zip").status_code == 405
+    csrf = client.get("/auth/session").json()["csrf"]
+    assert (
+        client.post(
+            "/downloads/latest.zip", headers={"Origin": "https://testserver", "X-CAD-CSRF": csrf}
+        ).status_code
+        == 405
+    )
