@@ -294,6 +294,10 @@ def create_app(data_dir: Path | None = None):
             "render-top.png",
             "render-front.png",
             "render-exploded.png",
+            "review-iso.png",
+            "review-top.png",
+            "review-front.png",
+            "review-exploded.png",
             "validation.json",
             "casting-box-report.json",
         }

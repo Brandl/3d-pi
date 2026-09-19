@@ -254,6 +254,8 @@ The gateway now **fails closed without a configured password**. Every preview, a
 
 The CAD-workbench layout includes a command ribbon, model browser, central viewport, bottom publication timeline and pi side panel. **Components** opens the reference library: slide-lock and captured-floor instructions, draft parameters, implementation source and validation notes. Preparing a request only drafts a message for pi; it never inserts or publishes geometry automatically. Persistent component releases/instances and project navigation remain planned; see [component-library scope](docs/component-library.md).
 
+Pi automatically receives multi-view image checkpoints on first inspection and successful builds. New builds include distinct-colour inspection renders with part legends; old revisions use their existing images. Publication remains explicit, and dotted hidden-line rendering is not implemented. See [visual review behaviour](docs/visual-review.md).
+
 See [container deployment, credentials, backups and rollback](docs/container-deployment.md). For gateway-only development:
 
 ```sh

@@ -95,6 +95,110 @@ function text(data: unknown) {
   }
   return { content: [{ type: "text" as const, text: output }], details: {} };
 }
+type View = "iso" | "top" | "front" | "exploded";
+type VisualContent =
+  | { type: "text"; text: string }
+  | { type: "image"; mimeType: "image/png"; data: string };
+async function reviewImages(
+  id: string,
+  views: View[],
+  signal?: AbortSignal,
+  style: "inspection" | "standard" = "inspection",
+) {
+  const frames = await Promise.all(
+    views.map(async (view) => {
+      try {
+        let prefix = style === "inspection" ? "review" : "render";
+        const get = () =>
+          fetch(
+            `${endpoint}/api/revisions/${id}/artifacts/${prefix}-${view}.png`,
+            {
+              signal: signal
+                ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+                : AbortSignal.timeout(15000),
+            },
+          );
+        let response = await get();
+        if (response.status === 404 && prefix === "review") {
+          await response.body?.cancel();
+          prefix = "render";
+          response = await get();
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.headers.get("content-type")?.startsWith("image/png")) {
+          await response.body?.cancel();
+          throw new Error("Expected PNG");
+        }
+        const reader = response.body!.getReader(),
+          chunks: Uint8Array[] = [];
+        let size = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.length;
+          if (size > 4 * 1024 * 1024) {
+            await reader.cancel();
+            throw new Error("Image exceeds 4 MiB review limit");
+          }
+          chunks.push(value);
+        }
+        const image = Buffer.concat(chunks);
+        if (
+          image.length < 24 ||
+          !image
+            .subarray(0, 8)
+            .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        )
+          throw new Error("Invalid PNG");
+        const width = image.readUInt32BE(16),
+          height = image.readUInt32BE(20);
+        if (!width || !height || width > 4096 || height > 4096)
+          throw new Error("Image dimensions exceed review limit");
+        return { view, prefix, image };
+      } catch (error) {
+        signal?.throwIfAborted();
+        return { view, error: String(error) };
+      }
+    }),
+  );
+  const content: VisualContent[] = [];
+  for (const frame of frames) {
+    if (frame.image) {
+      content.push(
+        {
+          type: "text",
+          text: `Visual checkpoint · revision ${id} · ${frame.view.toUpperCase()} · mm. ${frame.prefix === "review" ? "Distinct named part colours and legend." : "Standard render fallback: this revision has no inspection-colour image."} Preview geometry; transparent parts may be shown. This is NOT a hidden-line drawing. Inspect shape, proportions, mating alignment, clearances and requested changes; do not infer dimensions from pixels.`,
+        },
+        {
+          type: "image",
+          mimeType: "image/png",
+          data: frame.image.toString("base64"),
+        },
+      );
+    } else
+      content.push({
+        type: "text",
+        text: `Revision ${id}: ${frame.view} image unavailable (${frame.error}). ${frame.view === "exploded" ? "Exploded view is optional and may not exist." : "Visual review is incomplete; retry cad_render before publication."}`,
+      });
+  }
+  return {
+    content,
+    details: {
+      revision: id,
+      views: frames.filter((f) => f.image).map((f) => f.view),
+      missing_views: frames.filter((f) => !f.image).map((f) => f.view),
+      complete:
+        frames.some((f) => Boolean(f.image)) &&
+        frames
+          .filter((f) => f.view !== "exploded")
+          .every((f) => Boolean(f.image)),
+      meaning:
+        "Complete means requested mandatory images were attached, not that the design was approved.",
+      hidden_line_rendering: false,
+    },
+  };
+}
+
 function brief(row: any) {
   const report = row.result?.report;
   return {
@@ -183,13 +287,22 @@ async function build(
       : row.result,
     next:
       row.status === "ready"
-        ? "Inspect cad_tree, cad_measure, cad_validate and cad_render. Publication is separate."
+        ? "Inspect the attached visual checkpoint, cad_tree, cad_measure and cad_validate. Use cad_render to retry missing views or inspect again. Publication is separate."
         : ["failed", "cancelled"].includes(row.status)
           ? "Inspect diagnostics; fix the input before building again. Nothing was published."
           : "Build still running; poll cad_inspect with this revision, or use cad_cancel.",
   };
 }
 export default function (pi: ExtensionAPI) {
+  const visualCheckpoints = new Set<string>();
+  pi.on("session_compact", async () => {
+    visualCheckpoints.clear();
+  });
+  function rememberCheckpoint(id: string) {
+    visualCheckpoints.add(id);
+    if (visualCheckpoints.size > 32)
+      visualCheckpoints.delete(visualCheckpoints.values().next().value!);
+  }
   function tool<T extends TSchema>(
     name: string,
     description: string,
@@ -205,10 +318,66 @@ export default function (pi: ExtensionAPI) {
       label: name,
       description:
         description +
-        " Outputs are bounded JSON; use focused selectors if truncated.",
+        " Primary text is bounded JSON; use focused selectors if truncated. Ready builds and first summary inspections attach a multi-view visual checkpoint when available.",
       parameters,
       async execute(id, params, signal) {
-        return text(await execute(params, signal, id));
+        const input = params as any;
+        if (
+          ["cad_publish", "cad_restore"].includes(name) &&
+          !visualCheckpoints.has(input.revision)
+        ) {
+          const row = await request(
+            `/api/revisions/${input.revision}`,
+            undefined,
+            signal,
+          );
+          if (row.status === "ready") {
+            const review = await reviewImages(
+              input.revision,
+              ["iso", "top", "front", "exploded"],
+              signal,
+            );
+            if (review.details.complete) rememberCheckpoint(input.revision);
+            const checkpoint = text({
+              revision: input.revision,
+              status: "visual_review_required",
+              published: false,
+              next: `No publication performed. Inspect the attached images and validation results, then explicitly call ${name} again with the original expected_generation. If images are missing, retry cad_render first.`,
+            });
+            return {
+              ...checkpoint,
+              content: [...checkpoint.content, ...review.content],
+              details: { visual_review: review.details },
+            };
+          }
+        }
+        const data: any = await execute(params, signal, id);
+        const output = text(data);
+        const candidate = ["cad_build", "cad_parameters"].includes(name)
+          ? data
+          : name === "cad_inspect" &&
+              (!(params as any).view || (params as any).view === "summary")
+            ? data.current
+            : null;
+        if (
+          candidate?.status === "ready" &&
+          !visualCheckpoints.has(candidate.revision)
+        ) {
+          const review = await reviewImages(
+            candidate.revision,
+            ["iso", "top", "front", "exploded"],
+            signal,
+          );
+          if (review.details.complete) {
+            rememberCheckpoint(candidate.revision);
+          }
+          return {
+            ...output,
+            content: [...output.content, ...review.content],
+            details: { visual_review: review.details },
+          };
+        }
+        return output;
       },
     });
   }
@@ -505,8 +674,8 @@ export default function (pi: ExtensionAPI) {
     tool(
       `cad_${operation}`,
       operation === "publish"
-        ? "Publish a validated ready candidate after inspecting measurements, assembly/export checks and renders. This changes the active design. Use current expected_generation; stale edits are rejected."
-        : "Explicitly restore a previously published revision, creating a new publication event. Browsing history is NOT permission to restore. Does not delete history.",
+        ? "Publish a validated ready candidate after inspecting measurements, checks and images. If this session has not received its visual checkpoint, the first call returns images WITHOUT publishing; inspect them and explicitly retry. Use the candidate base generation while still current."
+        : "Explicitly restore a previously published revision. Browsing is NOT permission to restore. If its visual checkpoint has not been delivered this session, first return images WITHOUT restoring; inspect and explicitly retry. History is retained.",
       Type.Object({ revision, expected_generation: generation }),
       async (p, s) =>
         request(
@@ -551,39 +720,31 @@ export default function (pi: ExtensionAPI) {
     name: "cad_render",
     label: "CAD render",
     description:
-      "Inspect a revision-bound image, including unpublished candidates. Default is isometric; exploded views show assembly relationships. Viewing does not publish.",
+      "Send actual images to the model for visual inspection. Default review includes iso/top/front and optional exploded views; choose a single view if needed. Inspection style uses named part colours where available, standard style uses original colours. No hidden-line rendering or automatic publication.",
     parameters: Type.Object({
       revision,
-      view: Type.Optional(StringEnum(["iso", "top", "front", "exploded"])),
+      view: Type.Optional(
+        StringEnum(["review", "iso", "top", "front", "exploded"]),
+      ),
+      style: Type.Optional(StringEnum(["inspection", "standard"])),
     }),
     async execute(_id, p, signal) {
-      const view = p.view ?? "iso";
-      const response = await fetch(
-        `${endpoint}/api/revisions/${p.revision}/artifacts/render-${view}.png`,
-        {
-          signal: signal
-            ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
-            : AbortSignal.timeout(15000),
-        },
+      const views: View[] =
+        !p.view || p.view === "review"
+          ? ["iso", "top", "front", "exploded"]
+          : [p.view];
+      const review = await reviewImages(
+        p.revision,
+        views,
+        signal,
+        p.style ?? "inspection",
       );
-      if (!response.ok)
-        throw new Error(
-          `Render unavailable (${response.status}); inspect candidate status and available views.`,
-        );
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Revision ${p.revision}, ${view}; mm. Viewing only.`,
-          },
-          {
-            type: "image",
-            mimeType: "image/png",
-            data: Buffer.from(await response.arrayBuffer()).toString("base64"),
-          },
-        ],
-        details: { revision: p.revision, view },
-      };
+      if (
+        review.details.complete &&
+        ["iso", "top", "front"].every((view) => views.includes(view as View))
+      )
+        rememberCheckpoint(p.revision);
+      return review;
     },
   });
 }

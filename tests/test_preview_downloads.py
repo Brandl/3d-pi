@@ -27,7 +27,12 @@ def gateway(tmp_path, monkeypatch):
         "/api/revisions/{revision}/artifacts/{filename}", methods=["GET", "HEAD"]
     )
     def download(revision: str, filename: str):
-        assert revision == REVISION and filename == "casting-box.zip"
+        assert revision == REVISION
+        if filename == "review-iso.png":
+            image = tmp_path / "review-iso.png"
+            image.write_bytes(b"\x89PNG\r\n\x1a\n")
+            return FileResponse(image, media_type="image/png")
+        assert filename == "casting-box.zip"
         return FileResponse(file, filename=filename)
 
     origin = TestClient(upstream_app)

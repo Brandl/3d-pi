@@ -153,14 +153,23 @@ def preview(parts, doc):
     return {"units": "mm", "parts": result}
 
 
-def render(mesh, destination: Path, views=None):
+def render(mesh, destination: Path, views=None, *, review=False):
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    from matplotlib.patches import Patch
 
+    palette = plt.get_cmap("tab20")
+    names = sorted(part["name"] for part in mesh["parts"])
+    review_colors = {
+        name: palette((i * 2) % 20 + i // 10)
+        if len(names) <= 20
+        else plt.get_cmap("hsv")(i / len(names))
+        for i, name in enumerate(names)
+    }
     all_vertices = np.array([v for p in mesh["parts"] for v in p["vertices"]])
     center = (all_vertices.min(axis=0) + all_vertices.max(axis=0)) / 2
     radius = max(float(np.ptp(all_vertices, axis=0).max()) * 0.6, 1)
@@ -173,7 +182,7 @@ def render(mesh, destination: Path, views=None):
             ax.add_collection3d(
                 Poly3DCollection(
                     polygons,
-                    facecolors=part["color"],
+                    facecolors=review_colors[part["name"]] if review else part["color"],
                     edgecolor="none",
                     shade=True,
                     alpha=part.get("opacity", 1),
@@ -191,13 +200,33 @@ def render(mesh, destination: Path, views=None):
             ylim=(center[1] - radius, center[1] + radius),
             zlim=(center[2] - radius, center[2] + radius),
         )
-        ax.set_box_aspect((1, 1, 1))
+        ax.set_box_aspect((1, 1, 1), zoom=1.6 if review else 1)
         ax.set_proj_type("ortho")
         ax.view_init(elev=elev, azim=azim)
         ax.set_axis_off()
-        ax.set_title(f"{view.upper()} · millimeters", color="white")
-        fig.savefig(destination / f"render-{view}.png", bbox_inches="tight")
+        ax.set_title(f"{'REVIEW · ' if review else ''}{view.upper()} · millimeters", color="white")
+        if review:
+            fig.legend(
+                handles=[Patch(facecolor=review_colors[name], label=name) for name in names],
+                loc="lower center",
+                ncol=min(3, len(names)),
+                fontsize=7,
+                facecolor="#172535",
+                labelcolor="white",
+                edgecolor="#34495c",
+            )
+            fig.text(
+                0.02,
+                0.96,
+                "Preview geometry · transparent parts retained · not a hidden-line drawing",
+                color="#b5c6d5",
+                fontsize=7,
+            )
+        prefix = "review" if review else "render"
+        fig.savefig(destination / f"{prefix}-{view}.png", bbox_inches="tight")
         plt.close(fig)
+    if not review:
+        render(mesh, destination, views=views, review=True)
 
 
 def build_artifacts(doc: Document, directory: Path):

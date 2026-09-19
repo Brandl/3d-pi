@@ -53,6 +53,9 @@ def test_all_exports_and_renders(enclosure, tmp_path):
     assert len(dxf.modelspace().query("CIRCLE")) == 4
     for view in ("iso", "top", "front"):
         assert (tmp_path / f"render-{view}.png").read_bytes().startswith(b"\x89PNG")
+        review = (tmp_path / f"review-{view}.png").read_bytes()
+        assert review.startswith(b"\x89PNG")
+        assert review != (tmp_path / f"render-{view}.png").read_bytes()
     preview = json.loads((tmp_path / "preview.json").read_text(encoding="utf-8"))
     assert len(preview["parts"]) == 2
     assert all(p["edges"] and p["triangles"] for p in preview["parts"])

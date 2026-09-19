@@ -17,7 +17,7 @@ CASTING_BOX_LIMITS = {
 def capabilities():
     return {
         "schema_version": 1,
-        "tool_contract_version": 2,
+        "tool_contract_version": 3,
         "tree_schema_version": 1,
         "units": "mm",
         "casting_box_limits_mm": {
@@ -30,6 +30,12 @@ def capabilities():
             "These are casting-box limits, not a complete list of geometric/analytical constraints. Candidate validation remains required.",
         ],
         "workflow": ["inspect", "build candidate", "validate and render", "explicit publish"],
+        "visual_review": {
+            "views": ["iso", "top", "front", "exploded when available"],
+            "styles": ["inspection", "standard"],
+            "hidden_lines": False,
+            "note": "New builds include inspection-colour PNGs; older revisions retain their original images. Agent checkpoints attach images, not automatic approval.",
+        },
         "supported_exports": ["stl", "3mf", "step", "dxf", "zip"],
         "export_notes": "Availability is revision-specific. Analytic masters have no STEP; DXF requires named XY sections.",
         "scope": "One legacy design; no project selection or installed versioned component instances yet.",

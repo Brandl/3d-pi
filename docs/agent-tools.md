@@ -28,7 +28,7 @@ The browser uses the same `/api/revisions/{revision}/tree` and `/components/{id}
 | `cad_cancel` | Explicit revision. Cancels queued/running work; finished work is reported without changes. It never rolls back a publication. |
 | `cad_measure` | Whole-part measurements and assembly dimensions; optional part filter. Retains measurement basis. Analytic masters use validated mesh measurements, not exact B-reps. Part volume is not automatically plaster-cavity volume. |
 | `cad_validate` | Summary by default; sections `checks`, `mesh`, `exports`, `assembly`, `all`. No claim that modeled checks certify physical strength, fit or leak-tightness. |
-| `cad_render` | Revision-bound image. Defaults to `iso`; also supports `top`, `front`, `exploded` where available. |
+| `cad_render` | Actual revision-bound images sent to the model. Defaults to `view=review` (iso/top/front plus optional exploded); single views and inspection/standard styles are available. See [automatic visual checkpoints](visual-review.md). |
 
 If submission is uncertain, the error contains its request key: inspect history or retry identical input with that key. If a known candidate is still running after the wait budget, poll it instead of submitting another. A polling/network failure does not silently cancel a candidate. Explicit agent abort requests cancellation when the candidate ID is known; inspect state afterward because cancellation may race with completion.
 
@@ -40,7 +40,7 @@ If submission is uncertain, the error contains its request key: inspect history 
 | `cad_restore` | Explicit earlier publication plus current generation. Creates a new publication; browsing is never permission to restore. |
 | `cad_export` | Without format, lists available export keys/files. With format, resolves a specific artifact and manifest. Includes an authenticated website-relative download path; the internal loopback URL is not a public share link. Does not send files externally. |
 
-All tool text is bounded JSON. Oversized output is wrapped in a valid JSON truncation envelope directing the agent to narrower selectors; it is never silently treated as complete. File credentials and provider tokens are not part of these responses.
+Primary tool summaries are bounded JSON; visual checkpoints add captioned image/text blocks. First summary inspections and successful builds automatically attach views. Publish/restore first return `visual_review_required` without mutation if this extension instance has not delivered that revision's mandatory views; inspect and explicitly retry. Oversized JSON output is wrapped in a valid truncation envelope directing the agent to narrower selectors; it is never silently treated as complete. File credentials and provider tokens are not part of these responses.
 
 ## Validation
 

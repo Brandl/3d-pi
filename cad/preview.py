@@ -97,6 +97,10 @@ def artifact(revision: str, filename: str, request: Request):
         "render-top.png",
         "render-front.png",
         "render-exploded.png",
+        "review-iso.png",
+        "review-top.png",
+        "review-front.png",
+        "review-exploded.png",
         *row["result"]["exports"].values(),
     }
     if filename not in allowed:
@@ -153,6 +157,10 @@ def artifact(revision: str, filename: str, request: Request):
         "render-top.png",
         "render-front.png",
         "render-exploded.png",
+        "review-iso.png",
+        "review-top.png",
+        "review-front.png",
+        "review-exploded.png",
     }:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return Response(data, status_code=status, headers=headers)

@@ -54,11 +54,20 @@ assert.equal(
   (await call("cad_schema", { section: "casting_box" })).section,
   "casting_box",
 );
-const candidate = await call("cad_build", {
+const built = await raw("cad_build", {
   document_json: JSON.stringify(doc),
   expected_generation: state.generation,
 });
+const candidate = JSON.parse(built.content[0].text);
 assert.equal(candidate.result.report.valid, true);
+assert.equal(built.content.filter((item) => item.type === "image").length, 3);
+assert.equal(built.details.visual_review.complete, true);
+assert.equal(
+  (await raw("cad_inspect", { revision: candidate.revision })).content.filter(
+    (item) => item.type === "image",
+  ).length,
+  0,
+);
 assert.equal(
   (
     await call("cad_build", {
@@ -68,6 +77,15 @@ assert.equal(
     })
   ).revision,
   candidate.revision,
+);
+for (const handler of loaded.extensions[0].handlers.get("session_compact") ??
+  [])
+  await handler({ type: "session_compact" }, {});
+assert.equal(
+  (await raw("cad_inspect", { revision: candidate.revision })).content.filter(
+    (item) => item.type === "image",
+  ).length,
+  3,
 );
 const tree = await call("cad_tree", { revision: candidate.revision });
 assert.equal(tree.root.id, "assembly");
@@ -121,10 +139,43 @@ const image = await raw("cad_render", {
 });
 assert.equal(image.content[1].mimeType, "image/png");
 assert.ok(image.content[1].data.length > 1000);
+const fresh = await loadExtensions(
+  [resolve(".pi/extensions/cad.ts")],
+  process.cwd(),
+);
+assert.deepEqual(fresh.errors, []);
+const publishTool = fresh.extensions[0].tools.get("cad_publish").definition;
+const checkpoint = await publishTool.execute(
+  randomUUID(),
+  { revision: candidate.revision, expected_generation: state.generation },
+  undefined,
+  undefined,
+  {},
+);
+assert.equal(
+  JSON.parse(checkpoint.content[0].text).status,
+  "visual_review_required",
+);
+assert.equal(
+  checkpoint.content.filter((item) => item.type === "image").length,
+  3,
+);
+assert.equal((await call("cad_inspect")).generation, state.generation);
 const published = await call("cad_publish", {
   revision: candidate.revision,
   expected_generation: state.generation,
 });
+const confirmed = await publishTool.execute(
+  randomUUID(),
+  { revision: candidate.revision, expected_generation: state.generation },
+  undefined,
+  undefined,
+  {},
+);
+assert.equal(
+  JSON.parse(confirmed.content[0].text).generation,
+  published.generation,
+);
 const changed = await call("cad_parameters", {
   changes_json: '{"wall":3,"hole_offset":10}',
   expected_generation: published.generation,
@@ -160,6 +211,30 @@ await call("cad_restore", {
 });
 const originalFetch = globalThis.fetch;
 try {
+  globalThis.fetch = async (url, options) =>
+    String(url).includes("/artifacts/review-")
+      ? new Response("missing", { status: 404 })
+      : originalFetch(url, options);
+  const legacyReview = await raw("cad_render", {
+    revision: candidate.revision,
+  });
+  assert.equal(
+    legacyReview.content.filter((item) => item.type === "image").length,
+    3,
+  );
+  assert.ok(
+    legacyReview.content.some(
+      (item) =>
+        item.type === "text" && item.text.includes("Standard render fallback"),
+    ),
+  );
+  globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+  const missing = await raw("cad_render", { revision: candidate.revision });
+  assert.equal(missing.details.complete, false);
+  assert.equal(
+    missing.content.filter((item) => item.type === "image").length,
+    0,
+  );
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ data: "very long output ".repeat(10000) }), {
       headers: { "Content-Type": "application/json" },
@@ -183,5 +258,5 @@ try {
   globalThis.fetch = originalFetch;
 }
 console.log(
-  "Pi integration passed: 15 tools loaded; capabilities, tree, component inspection, idempotent build, measure, validate, render, publish, parameter edit, export discovery/four exports, history, cancel, restore.",
+  "Pi integration passed: 15 tools loaded; capabilities, tree, component inspection, idempotent build, measure, validate, render, publish, parameter edit, export discovery/four exports, history, cancel, restore; automatic image checkpoints, compaction reset, pre-publication review, legacy fallback and missing-image handling.",
 );
