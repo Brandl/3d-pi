@@ -6,7 +6,7 @@ import {createBridge} from './server.mjs';
 
 const cwd=process.env.PI_WORKSPACE ?? '/workspace';
 const state=process.env.PI_STATE_DIR ?? '/agent-state';
-const agentDir=join(state,'pi');
+const agentDir=process.env.PI_AUTH_DIR ?? join(state,'pi');
 mkdirSync(agentDir,{recursive:true});
 const provider=process.env.PI_PROVIDER ?? 'openai-codex';
 const modelId=process.env.PI_MODEL ?? 'gpt-6-astra';
@@ -16,7 +16,7 @@ const seed=process.env.PI_SEED_AUTH_FILE;
 const credentials=seed ? new ReadOnlyCredentialStore(seed,provider) : undefined;
 const modelRuntime=await ModelRuntime.create({
   ...(credentials ? {credentials} : {authPath:join(agentDir,'auth.json')}),
-  modelsStorePath:join(state,'models-store.json'),
+  modelsStorePath:process.env.PI_MODELS_STORE ?? join(state,'models-store.json'),
 });
 async function refreshAuth() {
   if (!seed) return;
@@ -31,6 +31,8 @@ const loader=new DefaultResourceLoader({cwd,agentDir,settingsManager,
   noExtensions:true,noSkills:true,noPromptTemplates:true,noThemes:true,
   additionalExtensionPaths:[process.env.CAD_EXTENSION_PATH ?? '/opt/agent/cad.ts'],
   appendSystemPrompt:[
+    `Current project: ${process.env.PI_PROJECT_ID ?? 'dripper'}. Source cwd: ${cwd}. CAD_URL is project-scoped: ${process.env.CAD_URL}. Never drop its project prefix, operate on a sibling project, or infer publication permission from switching projects. Source Git belongs to this project; credentials and pi transcripts live outside its source repository. Read README/document.json if present for migrated design context. Old shared transcripts are archived, not the new session context. Imported candidates may have an old base_generation; rebuild the same source against this project's current generation before publishing.`,
+
     'You are the private CAD workspace agent. The authenticated website user is the operator. Use cad_inspect before edits, cad_tree and cad_component_inspect to understand parts, feature dependencies and mating relationships, and cad_capabilities to check live service limits. Fetch editable source with cad_inspect view=document. Parameters are design-global and may affect multiple components. Build candidates and examine the automatically attached visual checkpoints: isometric, top, front and optional exploded images. Describe relevant visual findings and check the requested change across views; do not substitute labels or report values for looking at the images. These are preview images, not hidden-line drawings. Cross-check cad_measure and cad_validate (including assembly/export sections), then publish only when verified. If publish/restore returns visual_review_required, no mutation happened: inspect the images before explicitly retrying. Missing images require cad_render retry. After compaction or uncertainty, request cad_render again rather than assuming old images remain in context. Build is not publication. Reuse request keys only with identical inputs; poll a pending revision instead of resubmitting. Tree interfaces are not separate solids or released library instances. The browser may be viewing historical geometry; a viewed revision is context, never automatic permission to restore it. Do not change geometry unless requested. Preserve current dimensions unless the user asks otherwise. Write parametric source changes in the workspace and commit verified milestones to its local Git repository. Never read or disclose credential files, provider tokens, login secrets or environment secrets unless the operator explicitly requests that exact secret. Do not edit runtime databases or immutable artifacts. The CAD engine is a separate service: editing local source does not hot-reload that service. Do not claim unsupported features or deployment changes have happened.'
   ]});
 await loader.reload();
@@ -41,7 +43,7 @@ const {session}=await createAgentSession({cwd,agentDir,modelRuntime,model,thinki
 await session.bindExtensions({mode:'json'});
 if (!['cad_inspect','cad_tree','cad_component_inspect','cad_capabilities','cad_cancel'].every(name=>session.getActiveToolNames().includes(name))) throw new Error('Refined CAD tools are not active');
 const token=readFileSync(process.env.CAD_AGENT_TOKEN_FILE,'utf8').trim();
-const bridge=createBridge({session,token,refreshAuth,journalPath:join(state,'requests.json')});
+const bridge=createBridge({session,token,refreshAuth,journalPath:join(state,'requests.json'),transcriptPath:join(state,'transcript.md'),projectionPath:join(state,'web-state.json')});
 bridge.server.listen(Number(process.env.PI_WEB_PORT ?? 8768),'127.0.0.1',()=>console.log('Pi web bridge ready'));
 let closing=false;
 for (const signal of ['SIGINT','SIGTERM']) process.on(signal,async()=>{

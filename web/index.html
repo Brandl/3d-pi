@@ -11,6 +11,13 @@
         <span class="logo">π</span><strong>3d-pi</strong
         ><span class="muted">/ Design workspace</span>
       </div>
+      <div class="project-controls">
+        <label for="project-select">Project</label>
+        <select id="project-select" disabled><option>Loading…</option></select>
+        <button id="project-new">New project</button>
+        <a id="project-transcript" href="/api/agent/transcript">Pi transcript</a>
+        <span id="project-status" role="status"></span>
+      </div>
       <div id="connection" role="status">Connecting…</div>
       <button id="logout" hidden>Sign out</button>
     </header>
@@ -25,6 +32,8 @@
         </div>
         <section aria-label="Design timeline">
           <h2>Design timeline</h2>
+          <label for="draft-select">Preview</label>
+          <select id="draft-select"><option value="">Published model</option></select>
           <div class="timeline-controls">
             <button id="timeline-previous" disabled>Previous</button>
             <button id="timeline-next" disabled>Next</button>
@@ -50,7 +59,7 @@
           <dl id="parameters"></dl>
         </section>
         <section>
-          <h2>Export published model</h2>
+          <h2>Export viewed model</h2>
           <div class="export-filter">
             <label for="export-type">File type</label>
             <select id="export-type" disabled>

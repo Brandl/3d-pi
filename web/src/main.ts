@@ -1,3 +1,5 @@
+import {projectPath} from './project-path';
+import './projects';
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import "./style.css";
@@ -30,6 +32,7 @@ type State = {
   generation: number;
   history: { id: string; status: string }[];
   publications?: Publication[];
+  candidates?: string[];
 };
 type Part = {
   x: number;
@@ -72,7 +75,7 @@ async function get<T>(url: string): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch(url, {
+    const response = await fetch(projectPath(url), {
       signal: controller.signal,
       cache: "no-store",
     });
@@ -113,7 +116,7 @@ const controls = renderer
   : null;
 if (controls) controls.enableDamping = true;
 function updateFallbackImage(revision: string) {
-  fallbackImage.src = `/api/revisions/${revision}/artifacts/render-${exploded ? "exploded" : currentView}.png`;
+  fallbackImage.src = projectPath(`/api/revisions/${revision}/artifacts/render-${exploded ? "exploded" : currentView}.png`);
   fallbackImage.hidden = false;
 }
 scene.add(new THREE.HemisphereLight(0xd7efff, 0x536270, 2.5));
@@ -359,7 +362,7 @@ function details(row: Revision) {
   $("exports").replaceChildren();
   for (const [format, filename] of Object.entries(row.result.exports)) {
     const link = document.createElement("a");
-    link.href = `/downloads/${row.id}/${encodeURIComponent(filename)}`;
+    link.href = projectPath(`/downloads/${row.id}/${encodeURIComponent(filename)}`);
     const [kind, part] = format.split(":");
     link.dataset.fileType = kind;
     link.textContent = part
@@ -381,15 +384,24 @@ function versionFromUrl(): number | null {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 let selectedVersion = versionFromUrl();
+let candidate = new URL(location.href).searchParams.get('candidate');
+const draftSelect = $('draft-select') as HTMLSelectElement;
+draftSelect.addEventListener('change',()=>{
+  const url=new URL(location.href);url.searchParams.delete('version');
+  if(draftSelect.value)url.searchParams.set('candidate',draftSelect.value);else url.searchParams.delete('candidate');
+  location.assign(url);
+});
 let timeline: Publication[] = [];
 let timelineKey = "";
 let selectionWarning = "";
 const timelinePosition = $("timeline-position") as HTMLInputElement;
 function chooseVersion(version: number | null) {
   selectedVersion = version;
+  candidate = null;
   selectionWarning = "";
   loadError = "";
   const url = new URL(location.href);
+  url.searchParams.delete('candidate');
   if (version === null) url.searchParams.delete("version");
   else url.searchParams.set("version", String(version));
   history.replaceState(null, "", url);
@@ -426,7 +438,13 @@ function renderTimeline(state: State) {
   }
   const index = timelineIndex();
   const entry = timeline[index];
-  desired = entry?.revision ?? state.revision;
+  const candidates = state.candidates ?? [];
+  if(candidate && !candidates.includes(candidate))candidate=null;
+  if(!state.revision && !candidate)candidate=candidates[0]??null;
+  desired = candidate ?? entry?.revision ?? state.revision;
+  draftSelect.replaceChildren(new Option('Published model',''));
+  for(const id of candidates)draftSelect.add(new Option('Unpublished · '+id.slice(0,8),id));
+  draftSelect.value=candidate??'';
   const key = JSON.stringify(timeline);
   if (key !== timelineKey) {
     timelineKey = key;
@@ -457,7 +475,7 @@ function renderTimeline(state: State) {
   ($("timeline-previous") as HTMLButtonElement).disabled = index <= 0;
   ($("timeline-next") as HTMLButtonElement).disabled = index < 0 || index >= timeline.length-1;
   ($("timeline-latest") as HTMLButtonElement).disabled = selectedVersion === null;
-  const status = selectionWarning + (entry
+  const status = candidate ? 'UNPUBLISHED CANDIDATE · '+candidate.slice(0,8)+' · browsing does not publish' : selectionWarning + (entry
     ? selectedVersion === null ? `Following latest · v${entry.generation}` : `Viewing v${entry.generation} · pinned · latest is v${state.generation}`
     : "No published versions.");
   if ($("timeline-status").textContent !== status) $("timeline-status").textContent = status;
@@ -549,7 +567,7 @@ async function poll() {
 function connect() {
   try {
     const socket = new WebSocket(
-      `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/events`,
+      `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${projectPath('/api/events')}`,
     );
     const deadline = setTimeout(() => socket.close(), 8000);
     socket.onopen = () => {

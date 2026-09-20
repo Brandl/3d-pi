@@ -1,6 +1,6 @@
 import http from 'node:http';
 import {createHash, timingSafeEqual} from 'node:crypto';
-import {existsSync, readFileSync, writeFileSync, renameSync} from 'node:fs';
+import {existsSync, readFileSync, writeFileSync, renameSync, appendFileSync} from 'node:fs';
 
 export function visibleMessage(message) {
   if (!['user','assistant','toolResult'].includes(message.role)) return null;
@@ -10,7 +10,7 @@ export function visibleMessage(message) {
   return {role:message.role,text,tools,tool:message.toolName,error:Boolean(message.isError),timestamp:message.timestamp};
 }
 
-export function createBridge({session, token, journalPath, refreshAuth=async()=>{}}) {
+export function createBridge({session, token, journalPath, transcriptPath, projectionPath, refreshAuth=async()=>{}}) {
   if (!token || token.length<32) throw new Error('Internal agent token is required');
   const digest = x=>createHash('sha256').update(x).digest();
   const secretDigest=digest('Bearer '+token);
@@ -21,6 +21,10 @@ export function createBridge({session, token, journalPath, refreshAuth=async()=>
     jobs=jobs.slice(-200);
     writeFileSync(journalPath+'.tmp',JSON.stringify(jobs),{mode:0o600});
     renameSync(journalPath+'.tmp',journalPath);
+    if(projectionPath){
+      writeFileSync(projectionPath+'.tmp',JSON.stringify({...snapshot(),busy:false,partial:null,activeTools:[]}),{mode:0o600});
+      renameSync(projectionPath+'.tmp',projectionPath);
+    }
   }
   for (const job of jobs) if (job.status==='running') {
     job.status='interrupted';job.error='Agent restarted; inspect the model before resubmitting.';
@@ -29,7 +33,17 @@ export function createBridge({session, token, journalPath, refreshAuth=async()=>
   const unsubscribe=session.subscribe(event=>{
     sequence++;
     if (event.type==='message_update') partial=visibleMessage(event.message);
-    if (event.type==='message_end') partial=null;
+    if (event.type==='message_end') {
+      partial=null;
+      if(transcriptPath && visibleMessage(event.message)) {
+        const message=event.message;
+        const content=typeof message.content==='string'?[{type:'text',text:message.content}]:message.content??[];
+        const text=content.filter(c=>c.type==='text').map(c=>c.text).join('\n');
+        const tools=content.filter(c=>c.type==='toolCall').map(c=>c.name).join(', ');
+        try {appendFileSync(transcriptPath,`\n\n## ${message.role}${message.toolName?' · '+message.toolName:''}\n\n${text}${tools?'\nTools: '+tools:''}\n`,{mode:0o600});}
+        catch {error='Readable transcript could not be saved; inspect raw pi sessions.';}
+      }
+    }
     if (event.type==='tool_execution_start') activeTools.set(event.toolCallId,event.toolName);
     if (event.type==='tool_execution_end') activeTools.delete(event.toolCallId);
   });
@@ -37,21 +51,21 @@ export function createBridge({session, token, journalPath, refreshAuth=async()=>
     res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify(data));
   };
+  function snapshot() {
+    const messages=session.messages.map(visibleMessage).filter(Boolean).slice(-100);
+    let budget=240000;const recent=[];
+    for(const message of messages.reverse()){
+      if(budget<=0)break;
+      message.text=message.text.slice(0,budget);budget-=message.text.length;recent.unshift(message);
+    }
+    return {sessionId:session.sessionId,model:session.model?`${session.model.provider}/${session.model.id}`:null,
+      busy,sequence,messages:recent,partial,activeTools:[...activeTools.values()],error,job:jobs.at(-1)??null};
+  }
   const server=http.createServer(async(req,res)=>{
     if (!timingSafeEqual(digest(req.headers.authorization ?? ''),secretDigest)) return reply(res,401,{detail:'Unauthorized'});
     try {
       if (req.method==='GET' && req.url==='/state') {
-        const messages=session.messages.map(visibleMessage).filter(Boolean).slice(-100);
-        // Bound the web projection; complete messages remain in pi's JSONL session.
-        let budget=240000;
-        const recent=[];
-        for (const message of messages.reverse()) {
-          if (budget<=0) break;
-          message.text=message.text.slice(0,budget);budget-=message.text.length;
-          recent.unshift(message);
-        }
-        return reply(res,200,{sessionId:session.sessionId,model:session.model ? `${session.model.provider}/${session.model.id}` : null,
-          busy,sequence,messages:recent,partial,activeTools:[...activeTools.values()],error,job:jobs.at(-1) ?? null});
+        return reply(res,200,snapshot());
       }
       if (req.method==='POST' && req.url==='/abort') {
         if (busy) {abortRequested=true;await session.abort();}

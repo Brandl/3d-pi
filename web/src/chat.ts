@@ -1,3 +1,4 @@
+import {projectPath, projectId} from './project-path';
 type ChatMessage = {role:string;text:string;tools?:string[];tool?:string;error?:boolean};
 type AgentState = {sessionId:string;model:string;busy:boolean;sequence:number;messages:ChatMessage[];
   partial:ChatMessage|null;activeTools:string[];error:string;job?:{status:string;error?:string}};
@@ -10,7 +11,7 @@ function login() {
   location.assign('/auth/login?next='+encodeURIComponent(location.pathname+location.search));
 }
 async function call(path:string,body?:unknown) {
-  const response=await fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
+  const response=await fetch(projectPath(path),{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
     headers:body===undefined?{}:{'Content-Type':'application/json','X-CAD-CSRF':csrf},
     body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
   if(response.status===401){login();throw new Error('Please sign in');}
@@ -71,7 +72,7 @@ async function init() {
     try {
       // Record the viewed version as context, never as a request to restore it.
       const revision=element('viewport').dataset.revision;
-      const context=revision?`\n\n[Viewer context: currently viewing revision ${revision}. This may be historical; inspect the live CAD state before edits. Browsing is not permission to restore.]`:'';
+      const context=revision?`\n\n[Viewer context: project ${projectId??'dripper'}, currently viewing revision ${revision}. This may be historical; inspect the live CAD state before edits. Browsing is not permission to restore.]`:'';
       await call('/api/agent/prompt',{text:text+context,request_key:crypto.randomUUID()});
       input.value='';busy=true;render(await call('/api/agent/state'));
     } catch(error) {element('chat-status').textContent=String(error);}

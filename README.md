@@ -147,7 +147,7 @@ The document is the parametric source of truth, not the preview mesh or conversa
 
 ### Limits and deployment boundary
 
-This is **one local project per data directory, one service process, one active build**, with up to four queued/running jobs. Default storage is `data/`; change it with `CAD_DATA_DIR`.
+This is **one single-owner installation, folder-backed projects, and one active geometry worker**. Each project has its own history/generation, source Git repository and pi transcripts. The global queue is bounded to eight tasks, with the existing four-job per-project bound. Default CAD storage is `data/`; change it with `CAD_DATA_DIR`. See [folder projects and migration](docs/projects.md).
 
 - 100 features, 16 output parts, 64 parameters, 100 polygon vertices, 16 DXF sections, 64 assertions.
 - 256 KiB request bodies; expressions at most 160 characters / 64 AST nodes.
@@ -234,7 +234,7 @@ There is no automatic artifact cleanup or retention limit. History responses sho
 - Arbitrary Python source execution / production OS sandboxing.
 - Rich sketch constraints, revolve/loft/shell/chamfer operations, general patterns, and assembly mates.
 - STEP import, persistent topological naming, projection DXFs, sheet-metal unfolding.
-- Multiple projects/users, authentication, cloud hosting, automatic cache/garbage collection.
+- Multiple users, multiple designs within one project, automatic cache/garbage collection. Folder projects and single-owner authentication are implemented.
 - Browser-integrated chat, MCP adapter, agent control of the live browser camera, contextual picking.
 - Photorealistic or occlusion-perfect inspection renders; PNGs are basic orthographic-style views of tessellated geometry.
 
@@ -252,7 +252,7 @@ Runtime databases and generated artifacts are deliberately excluded from Git and
 
 The gateway now **fails closed without a configured password**. Every preview, artifact, asset, WebSocket and agent endpoint requires authentication. The website includes a persistent pi conversation; authenticated prompts can change models through pi's CAD tools. This is a single trusted owner's interface, not anonymous sharing or multi-user accounts.
 
-The CAD-workbench layout includes a command ribbon, model browser, central viewport, bottom publication timeline and pi side panel. **Components** opens the reference library: slide-lock and captured-floor instructions, draft parameters, implementation source and validation notes. Preparing a request only drafts a message for pi; it never inserts or publishes geometry automatically. Persistent component releases/instances and project navigation remain planned; see [component-library scope](docs/component-library.md).
+The CAD-workbench layout includes a command ribbon, model browser, central viewport, bottom publication timeline and pi side panel. **Components** opens the reference library: slide-lock and captured-floor instructions, draft parameters, implementation source and validation notes. Preparing a request only drafts a message for pi; it never inserts or publishes geometry automatically. The header provides folder-project navigation/creation and pi transcript downloads; ready candidates are explicitly distinguished from publications. Persistent component releases/instances remain planned; see [component-library scope](docs/component-library.md).
 
 Pi automatically receives multi-view image checkpoints on first inspection and successful builds. New builds include distinct-colour inspection renders with part legends; old revisions use their existing images. Publication remains explicit, and dotted hidden-line rendering is not implemented. See [visual review behaviour](docs/visual-review.md).
 

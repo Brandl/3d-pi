@@ -13,18 +13,24 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from cad.auth import PasswordGate, PasswordMiddleware
+from cad.projects import ProjectScope, prefix, project_id
 
 ORIGIN = os.environ.get("CAD_ORIGIN", "http://127.0.0.1:8765")
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.state.gate = PasswordGate.from_env()
 app.add_middleware(PasswordMiddleware, owner=app)
+app.add_middleware(ProjectScope)
 
 
 def fetch(path):
     try:
-        with urllib.request.urlopen(ORIGIN + path, timeout=15) as response:
+        with urllib.request.urlopen(ORIGIN + prefix() + path, timeout=15) as response:
             return response.read(), response.headers.get("Content-Type", "application/octet-stream")
+    except urllib.error.HTTPError as exc:
+        raise HTTPException(
+            exc.code if exc.code in (404, 409) else 502, "CAD project or resource unavailable"
+        ) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise HTTPException(502, "Local CAD service unavailable") from exc
 
@@ -37,6 +43,10 @@ def published(revision):
     if not re.fullmatch(r"[a-f0-9]{32}", revision):
         raise HTTPException(404)
     state = upstream("/api/state")
+    if project_id.get() and any(
+        r["id"] == revision and r["status"] == "ready" for r in state["history"]
+    ):
+        return upstream(f"/api/revisions/{revision}")
     if revision not in {p["revision"] for p in state["publications"]}:
         raise HTTPException(404, "Only published models are available in the preview")
     return upstream(f"/api/revisions/{revision}")
@@ -49,6 +59,14 @@ def state():
     return {
         "revision": data["revision"],
         "generation": data["generation"],
+        "candidates": [
+            r["id"]
+            for r in data["history"]
+            if r["status"] == "ready"
+            and r["id"] not in {p["revision"] for p in data["publications"]}
+        ]
+        if project_id.get()
+        else [],
         "history": [{"id": data["revision"], "status": "ready"}] if data["revision"] else [],
         "publications": [
             {
@@ -113,7 +131,7 @@ def artifact(revision: str, filename: str, request: Request):
         if request.method == "GET" and name in request.headers
     }
     req = urllib.request.Request(
-        ORIGIN + f"/api/revisions/{revision}/artifacts/{filename}",
+        ORIGIN + prefix() + f"/api/revisions/{revision}/artifacts/{filename}",
         method=request.method,
         headers=forwarded,
     )
@@ -187,22 +205,48 @@ def agent_request(operation, body=None):
     secret = Path(secret_path).read_text().strip()
     origin = os.environ.get("CAD_AGENT_ORIGIN", "http://127.0.0.1:8768")
     request = urllib.request.Request(
-        origin + "/" + operation,
+        origin + prefix() + "/" + operation,
         data=body,
         headers={"Authorization": "Bearer " + secret, "Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as result:
-            return Response(result.read(), status_code=result.status, media_type="application/json")
+            headers = {}
+            if operation == "transcript":
+                headers["Content-Disposition"] = 'attachment; filename="pi-transcript.md"'
+            return Response(
+                result.read(),
+                status_code=result.status,
+                media_type="text/plain" if operation == "transcript" else "application/json",
+                headers=headers,
+            )
     except urllib.error.HTTPError as exc:
         return Response(exc.read(), status_code=exc.code, media_type="application/json")
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise HTTPException(503, "Web agent is unavailable") from exc
 
 
+@app.api_route("/api/projects", methods=["GET", "POST"])
+async def project_catalog(request: Request):
+    body = None
+    if request.method == "POST":
+        chunks = bytearray()
+        async for chunk in request.stream():
+            chunks.extend(chunk)
+            if len(chunks) > 4096:
+                raise HTTPException(413, "Project request too large")
+        body = bytes(chunks)
+    return await asyncio.to_thread(agent_request, "projects", body)
+
+
 @app.api_route("/api/agent/{operation}", methods=["GET", "POST"])
 async def agent_proxy(operation: str, request: Request):
-    if (request.method, operation) not in {("GET", "state"), ("POST", "prompt"), ("POST", "abort")}:
+    if (request.method, operation) not in {
+        ("GET", "state"),
+        ("GET", "transcript"),
+        ("POST", "prompt"),
+        ("POST", "abort"),
+    }:
         raise HTTPException(404)
     body = None
     if request.method == "POST":

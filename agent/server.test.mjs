@@ -56,6 +56,19 @@ test('restart marks an unfinished request interrupted without replay',async()=>{
   finally {await bridge.dispose();rmSync(directory,{recursive:true});}
 });
 
+test('project transcript persists visible events without thinking or image payloads',async()=>{
+  const directory=mkdtempSync(join(tmpdir(),'cad-transcript-'));
+  const session=fakeSession();let emit;
+  session.subscribe=handler=>{emit=handler;return ()=>{};};
+  const transcriptPath=join(directory,'transcript.md'),projectionPath=join(directory,'web-state.json');
+  const bridge=createBridge({session,token:'x'.repeat(40),journalPath:join(directory,'requests.json'),transcriptPath,projectionPath});
+  try {
+    emit({type:'message_end',message:{role:'assistant',content:[{type:'text',text:'Project-specific reply'},{type:'thinking',thinking:'SECRET_THOUGHT'},{type:'image',data:'SECRET_IMAGE'}]}});
+    const text=readFileSync(transcriptPath,'utf8');assert.match(text,/Project-specific reply/);assert.doesNotMatch(text,/SECRET/);
+    assert.equal(JSON.parse(readFileSync(projectionPath)).sessionId,'test');
+  }finally{await bridge.dispose();rmSync(directory,{recursive:true});}
+});
+
 test('host credential bridge never invokes refresh or writes credentials',async()=>{
   const directory=mkdtempSync(join(tmpdir(),'cad-credentials-'));const path=join(directory,'auth.json');
   const original=JSON.stringify({test:{type:'oauth',access:'dummy',refresh:'dummy-refresh',expires:Date.now()+3600000}});

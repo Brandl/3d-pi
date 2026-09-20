@@ -1,4 +1,4 @@
-export {};
+import {projectPath} from './project-path';
 
 type TreeNode = {
   id: string;
@@ -30,7 +30,7 @@ async function inspect(node: TreeNode) {
   inspector.textContent = "Loading " + node.name + "…";
   try {
     const response = await fetch(
-      `/api/revisions/${revision}/components/${encodeURIComponent(node.id)}`,
+      projectPath(`/api/revisions/${revision}/components/${encodeURIComponent(node.id)}`),
     );
     if (!response.ok) throw new Error("Component details unavailable");
     const data = await response.json();
@@ -120,7 +120,7 @@ async function update() {
     : "No revision selected.";
   if (!revision) return;
   try {
-    const response = await fetch(`/api/revisions/${revision}/tree`);
+    const response = await fetch(projectPath(`/api/revisions/${revision}/tree`));
     if (!response.ok) throw new Error("Tree unavailable");
     const data = await response.json();
     if (version !== epoch) return;

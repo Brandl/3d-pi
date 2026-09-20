@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node main.mjs",
-    "test": "node --test server.test.mjs"
+    "test": "node --test server.test.mjs projects.test.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",

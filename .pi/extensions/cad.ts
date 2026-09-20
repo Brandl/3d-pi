@@ -709,9 +709,9 @@ export default function (pi: ExtensionAPI) {
       );
       return {
         ...data,
-        url: endpoint + data.url,
-        manifest_url: endpoint + data.manifest_url,
-        website_path: `/downloads/${p.revision}/${data.filename}`,
+        url: new URL(data.url, parsed.origin).href,
+        manifest_url: new URL(data.manifest_url, parsed.origin).href,
+        website_path: `${parsed.pathname.replace(/\/$/, '')}/downloads/${p.revision}/${data.filename}`,
         note: "Website-relative path requires authentication; do not give users the internal loopback URL as a public download.",
       };
     },

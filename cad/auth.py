@@ -184,7 +184,7 @@ class PasswordMiddleware:
         if not session:
             response = JSONResponse({"detail": "Login required"}, 401)
             if request.method in ("GET", "HEAD") and not path.startswith("/api/"):
-                target = path + (
+                target = scope.get("cad_original_path", path) + (
                     "?" + scope["query_string"].decode("utf-8", errors="replace")
                     if scope.get("query_string")
                     else ""

@@ -2,6 +2,14 @@
 
 This project is a local agent-driven CAD application. All geometry changes go through the CAD API/pi tools; the browser is a read-only model viewer with camera navigation.
 
+## Project scope
+
+Folder projects now have independent CAD histories and pi sessions. See `docs/projects.md`.
+Honor the project-scoped `CAD_URL`; never drop its `/projects/<id>` prefix. Browser
+switching and candidate viewing do not publish or restore anything. Credentials and
+transcripts are outside project source Git. Imported candidate base generations
+remain unchanged: rebuild at the destination generation before publication.
+
 ## Modeling workflow
 
 1. `cad_inspect` for a compact current-state summary and generation; use `view="document"` for editable source or `view="history"` for paginated publications/builds. Explicit revision IDs never change the published selection.

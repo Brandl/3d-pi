@@ -16,7 +16,8 @@ from pydantic import Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from cad.schema import Document, Strict
-from cad.storage import Conflict, Missing, Store
+from cad.storage import Conflict, Missing
+from cad.projects import Catalog, ProjectScope, project_id, prefix
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -25,6 +26,10 @@ class BuildRequest(Strict):
     document: Document
     expected_generation: int = Field(ge=0)
     request_key: str = Field(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9_-]+$")
+
+
+class ProjectRequest(Strict):
+    name: str = Field(min_length=1, max_length=80, pattern=r"^\S(?:.*\S)?$")
 
 
 class PublishRequest(Strict):
@@ -39,7 +44,8 @@ def same_origin(origin, host):
 
 
 def create_app(data_dir: Path | None = None):
-    store = Store((data_dir or Path(os.environ.get("CAD_DATA_DIR", ROOT / "data"))).resolve())
+    data_root = (data_dir or Path(os.environ.get("CAD_DATA_DIR", ROOT / "data"))).resolve()
+    store = Catalog(data_root)
     tasks = {}
     processes = {}
     subscribers = set()
@@ -50,7 +56,7 @@ def create_app(data_dir: Path | None = None):
             if queue.empty():
                 queue.put_nowait(True)
 
-    async def run_build(revision):
+    async def run_build(revision, store):
         try:
             async with semaphore:
                 if store.get(revision)["status"] != "queued":
@@ -116,13 +122,14 @@ def create_app(data_dir: Path | None = None):
 
     @asynccontextmanager
     async def lifespan(_app):
-        lock = (store.root / "service.lock").open("a")
+        lock = (data_root / "service.lock").open("a")
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             lock.close()
             raise RuntimeError("Another CAD service is using this data directory")
-        store.recover()
+        for project_store in store.all_stores():
+            project_store.recover()
         try:
             yield
         finally:
@@ -133,7 +140,9 @@ def create_app(data_dir: Path | None = None):
             lock.close()
 
     app = FastAPI(title="3d-pi", version="0.1.0", lifespan=lifespan)
-    app.state.store = store
+    app.state.store = store.selected()
+    app.state.catalog = store
+    app.add_middleware(ProjectScope)
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"]
     )
@@ -185,7 +194,11 @@ def create_app(data_dir: Path | None = None):
     def capabilities():
         from cad.limits import capabilities as describe
 
-        return describe()
+        return {
+            **describe(),
+            "project": store.metadata(project_id.get() or "dripper"),
+            "project_scope": "All revisions, builds, generations and publications are local to this project.",
+        }
 
     @app.get("/api/revisions/{revision}/tree")
     def assembly_tree(revision: str):
@@ -206,6 +219,23 @@ def create_app(data_dir: Path | None = None):
     def example():
         return json.loads((ROOT / "examples" / "enclosure.json").read_text(encoding="utf-8"))
 
+    @app.get("/api/projects")
+    def projects():
+        return {
+            "projects": [
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "legacy_root": bool(item.get("legacy_root")),
+                }
+                for item in store.list()
+            ]
+        }
+
+    @app.post("/api/projects", status_code=201)
+    def create_project(request: ProjectRequest):
+        return store.create(request.name)
+
     @app.get("/api/state")
     def state():
         return store.state()
@@ -216,11 +246,19 @@ def create_app(data_dir: Path | None = None):
 
     @app.post("/api/builds", status_code=202)
     async def build(request: BuildRequest):
-        row, created = store.create(
+        selected = store.selected()
+        if len(tasks) >= 8:
+            with selected.connection() as db:
+                known = db.execute(
+                    "SELECT 1 FROM revisions WHERE request_key=?", (request.request_key,)
+                ).fetchone()
+            if not known:
+                raise Conflict("Global build queue is full; poll existing candidates")
+        row, created = selected.create(
             request.document.model_dump(), request.expected_generation, request.request_key
         )
         if created:
-            task = asyncio.create_task(run_build(row["id"]))
+            task = asyncio.create_task(run_build(row["id"], selected))
             tasks[row["id"]] = task
             notify()
         return row
@@ -276,8 +314,8 @@ def create_app(data_dir: Path | None = None):
             "revision": revision,
             "units": "mm",
             "filename": filename,
-            "url": f"/api/revisions/{revision}/artifacts/{filename}",
-            "manifest_url": f"/api/revisions/{revision}/artifacts/manifest.json",
+            "url": prefix() + f"/api/revisions/{revision}/artifacts/{filename}",
+            "manifest_url": prefix() + f"/api/revisions/{revision}/artifacts/manifest.json",
         }
 
     @app.api_route("/api/revisions/{revision}/artifacts/{filename}", methods=["GET", "HEAD"])
