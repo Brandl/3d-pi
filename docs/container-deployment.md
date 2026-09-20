@@ -111,6 +111,12 @@ Source `1053c1f` adds automatic multi-view image tool results, separate named-co
 
 The real persistent agent received four image blocks from a default `cad_inspect` call and described the visible assembly without building or publishing. Its saved tool result was checked for all four actual images. Full backend suite: 99 tests passed before the framing follow-up; nine targeted rendering/geometry tests passed afterward, including projected-cube containment. The actual pi-loader integration covers automatic images, compaction reset, pre-publication pausing, legacy fallback and missing-image handling. Pre-upgrade CAD state remained unchanged. Prior service images are retained under `:before-visual-checkpoints`.
 
+### Folder-project rollout
+
+`ff31111` introduced [folder projects](projects.md); `46252ae` additionally hardens cancelled transcript downloads. The live copy-only migration preserved all **39 original revision records and 30 publications**, all copied artifact bytes, and the original runtime/agent session files. Dripper remains generation 30; Bike basket twist-lock has three imported unpublished candidates and generation 0. Both projects retain hashed, explicitly shared legacy web-pi transcripts. New source repositories and canonical pi JSONL sessions are separate.
+
+Validation: 102 backend tests, six agent tests, the real 15-tool loader integration against an isolated project-scoped endpoint, and two isolated local-browser project tests passed. Real production-browser read-only turns used different project session IDs, received four dripper / three bike image blocks, and reported correct scoped CAD state. The bike conversation resumed with the same session ID and previous messages after an agent-container restart. Local desktop/mobile checks found no browser errors or horizontal page overflow. Verification did not build or publish anything. Prior service images remain tagged `:before-projects`; original root data remains available for rollback. Read the migration/rollback notes before using those older images.
+
 ## Validation commands
 
 ```sh
