@@ -1,6 +1,7 @@
 import http from 'node:http';
 import {spawn, execFileSync} from 'node:child_process';
 import {once} from 'node:events';
+import {pipeline} from 'node:stream/promises';
 import {createHash, timingSafeEqual} from 'node:crypto';
 import {mkdirSync, existsSync, readFileSync, writeFileSync, createReadStream, lstatSync, symlinkSync, renameSync} from 'node:fs';
 import {join} from 'node:path';
@@ -97,10 +98,11 @@ const server=http.createServer(async(req,res)=>{
    const project=(await catalog()).find(p=>p.id===id);if(!project)return reply(res,404,{detail:'Unknown project'});
    const path=folder(project);
    if(operation==='transcript'){
+    res.setTimeout(30000,()=>res.destroy());
     res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':'attachment; filename="pi-transcript.md"','Cache-Control':'no-store'});
     for(const file of [join(path,'pi','legacy-shared','transcript.md'),join(path,'pi','transcript.md')]){
      if(!existsSync(file))continue;
-     for await(const chunk of createReadStream(file)){if(!res.write(chunk))await once(res,'drain');}
+     await pipeline(createReadStream(file),res,{end:false});
     }
     res.end();return;
    }

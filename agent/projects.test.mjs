@@ -46,6 +46,9 @@ test('project router pins workers, rejects busy switching and keeps project tran
   assert.equal((await request('/projects/missing/state')).status,404);
   assert.equal(JSON.parse(readFileSync(join(root,'projects/a/project.json'))).id,'a');
   await request('/projects/b/abort','POST');
+  writeFileSync(join(root,'projects/a/pi/transcript.md'),Buffer.alloc(8*1024*1024,65));
+  const interrupted=await request('/projects/a/transcript');await interrupted.body.cancel();
+  assert.equal((await request('/projects')).status,200); // cancelled download cannot wedge the router
  }finally{
   const exited=once(router,'exit');router.kill('SIGTERM');await exited;
   await new Promise(r=>cad.close(r));rmSync(root,{recursive:true,force:true});
