@@ -1,4 +1,5 @@
 import {projectPath, projectId} from './project-path';
+import {formatChatText} from './chat-format';
 type ChatMessage = {role:string;text:string;tools?:string[];tool?:string;error?:boolean};
 type AgentState = {sessionId:string;model:string;busy:boolean;sequence:number;messages:ChatMessage[];
   partial:ChatMessage|null;activeTools:string[];error:string;job?:{status:string;error?:string}};
@@ -44,7 +45,7 @@ function render(state:AgentState) {
     const title=document.createElement(message.role==='toolResult'?'summary':'strong');
     title.textContent=message.role==='user'?'You':message.role==='toolResult'?`${message.tool || 'Tool'}${message.error?' · error':''}`:'Pi';
     const text=document.createElement('div');
-    text.className='chat-text';text.textContent=message.text;
+    text.className='chat-text';if(message.role==='toolResult')text.textContent=message.text;else formatChatText(text,message.text);
     item.append(title,text);
     if(message.tools?.length){const tools=document.createElement('small');tools.textContent=`Tools: ${message.tools.join(', ')}`;item.append(tools);}
     if(message.role==='toolResult'){

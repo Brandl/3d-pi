@@ -129,7 +129,7 @@ scene.add(light);
 const fill = new THREE.DirectionalLight(0x9bcfff, 1.5);
 fill.position.set(-150, 100, 80);
 scene.add(fill);
-const grid = new THREE.GridHelper(500, 50, 0x355269, 0x263b4e);
+const grid = new THREE.GridHelper(500, 50, 0x91aa98, 0xc3d2c3);
 grid.rotation.x = Math.PI / 2;
 grid.position.z = -0.1;
 scene.add(grid);
