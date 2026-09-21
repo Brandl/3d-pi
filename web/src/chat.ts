@@ -35,8 +35,10 @@ function render(state:AgentState) {
   const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<70;
   log.replaceChildren();
   const messages=[...state.messages,...(state.partial?[state.partial]:[])];
+  let activity:HTMLDetailsElement|null=null;
+  let toolCount=0;
   for(const message of messages) {
-    if(!message.text && !message.tools?.length)continue;
+    if(!message.text)continue;
     const item=document.createElement(message.role==='toolResult'?'details':'article');
     item.className=`chat-message ${message.role}`;
     const title=document.createElement(message.role==='toolResult'?'summary':'strong');
@@ -45,7 +47,12 @@ function render(state:AgentState) {
     text.className='chat-text';text.textContent=message.text;
     item.append(title,text);
     if(message.tools?.length){const tools=document.createElement('small');tools.textContent=`Tools: ${message.tools.join(', ')}`;item.append(tools);}
-    log.append(item);
+    if(message.role==='toolResult'){
+      if(!activity){activity=document.createElement('details');activity.className='chat-activity';activity.append(document.createElement('summary'));log.append(activity);toolCount=0;}
+      activity.firstElementChild!.textContent=`Activity · ${++toolCount} tool${toolCount===1?'':'s'}`;
+      activity.append(item);
+      if(message.error){activity.open=true;(item as HTMLDetailsElement).open=true;}
+    }else{activity=null;log.append(item);}
   }
   if(atBottom)log.scrollTop=log.scrollHeight;
 }
