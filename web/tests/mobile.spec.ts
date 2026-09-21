@@ -1,0 +1,32 @@
+import {test,expect} from '@playwright/test';
+for(const width of [320,390,430,768,844]) test(`phone workspace panes and touch controls at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:width===844?390:844});
+ await page.route('**/auth/session',r=>r.fulfill({json:{csrf:'test'}}));
+ await page.route('**/api/agent/state',r=>r.fulfill({json:{sessionId:'test',model:'test',busy:false,sequence:1,activeTools:[],partial:null,error:'',messages:[{role:'assistant',text:'Ready to work together.'}]}}));
+ await page.goto('/');
+ const nav=page.locator('#mobile-navigation');await expect(nav).toBeVisible();
+ await expect(nav.getByRole('button',{name:'Chat',exact:true})).toBeEnabled();
+ await expect(page.locator('#viewport')).toBeVisible();await expect(page.locator('#chat-input')).toBeHidden();
+ const viewport=await page.locator('#viewport').boundingBox();const timeline=await page.locator('#design-timeline').boundingBox();
+ expect(viewport!.height).toBeGreaterThan(75);expect(timeline!.y).toBeGreaterThanOrEqual(viewport!.y+viewport!.height-1);
+ expect((await page.locator('#history').boundingBox())!.width).toBeGreaterThan(width*.85);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.body.scrollHeight<=innerHeight+1)).toBe(true);
+ for(const id of ['open-files','fit','section-view','timeline-working'])expect((await page.locator('#'+id).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await nav.getByRole('button',{name:'Chat',exact:true}).click();await expect(page.locator('#chat-input')).toBeVisible();
+ await expect(page.locator('#viewport')).toBeHidden();
+ const send=await page.locator('#chat-send').boundingBox();expect(send!.y+send!.height).toBeLessThan((await nav.boundingBox())!.y+1);
+ await page.locator('#chat-input').fill('Keep this draft');
+ await nav.getByRole('button',{name:'Parts',exact:true}).click();await expect(page.locator('#model-parts')).toBeVisible();
+ await nav.getByRole('button',{name:'Chat',exact:true}).click();await expect(page.locator('#chat-input')).toHaveValue('Keep this draft');
+ // Simulate reduced visual viewport height, without claiming a physical keyboard test.
+ await page.evaluate(()=>document.documentElement.style.setProperty('--mobile-height','460px'));
+ expect((await page.locator('#chat-send').boundingBox())!.y+(await page.locator('#chat-send').boundingBox())!.height).toBeLessThanOrEqual(460);
+ await page.evaluate(()=>document.documentElement.style.removeProperty('--mobile-height'));
+ await nav.getByRole('button',{name:'Parts',exact:true}).click();await page.locator('#ask-selection').click();
+ await expect(nav.getByRole('button',{name:'Chat',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.locator('#chat-input')).toBeFocused();
+ await page.locator('#open-files').click();await expect(page.locator('#files-drawer')).toBeVisible();
+ await expect(page.locator('#mobile-account').getByRole('button',{name:'Sign out',exact:true})).toBeVisible();
+ expect(await page.locator('#files-drawer').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ await page.getByRole('button',{name:'Close',exact:true}).click();
+ await page.setViewportSize({width:1440,height:900});await expect(nav).toBeHidden();await expect(page.locator('#viewport')).toBeVisible();await expect(page.locator('#model-parts')).toBeVisible();await expect(page.locator('#chat-input')).toBeVisible();
+});

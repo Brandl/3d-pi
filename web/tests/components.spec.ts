@@ -7,7 +7,8 @@ for(const mobile of [false,true]) test(`component reference library and safe cha
   const writes:string[]=[];
   page.on('request',request=>{if(request.method()==='POST')writes.push(request.url());});
   await page.goto('/');
-  await expect(page.locator('#chat-panel')).toBeVisible();
+  if(mobile)await expect(page.locator('#mobile-navigation').getByRole('button',{name:'Chat',exact:true})).toBeEnabled();
+  else await expect(page.locator('#chat-panel')).toBeVisible();
   await page.locator('#open-files').click();
   await page.getByRole('button',{name:'Components',exact:false}).click();
   const library=page.getByRole('dialog',{name:'Components'});

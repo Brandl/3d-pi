@@ -221,6 +221,7 @@ function view(name: string) {
   controls?.update();
 }
 new ResizeObserver(() => {
+  if(!viewport.clientWidth || !viewport.clientHeight)return; // Mobile panes can hide the canvas.
   camera.aspect = viewport.clientWidth / viewport.clientHeight;
   camera.updateProjectionMatrix();
   renderer?.setSize(viewport.clientWidth, viewport.clientHeight);
@@ -242,6 +243,7 @@ window.addEventListener("keydown", (event) => {
   if (views[event.key.toLowerCase()]) view(views[event.key.toLowerCase()]);
 });
 renderer?.setAnimationLoop(() => {
+  if(document.hidden || !viewport.clientWidth || !viewport.clientHeight)return;
   controls?.update();
   renderer.render(scene, camera);
 });
