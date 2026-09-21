@@ -9,7 +9,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field
@@ -240,6 +240,20 @@ def create_app(data_dir: Path | None = None):
     def state():
         return store.state()
 
+    from cad.workspace import CommitRequest, AssetRequest, commit, attach
+
+    @app.post("/api/workspace/commits", status_code=201)
+    async def design_commit(request: CommitRequest):
+        result = commit(store.selected(), request)
+        notify()
+        return result
+
+    @app.post("/api/workspace/assets", status_code=201)
+    async def design_asset(request: AssetRequest):
+        result = attach(store.selected(), request)
+        notify()
+        return result
+
     @app.get("/api/revisions/{revision}")
     def inspect(revision: str):
         return store.get(revision)
@@ -317,6 +331,44 @@ def create_app(data_dir: Path | None = None):
             "url": prefix() + f"/api/revisions/{revision}/artifacts/{filename}",
             "manifest_url": prefix() + f"/api/revisions/{revision}/artifacts/manifest.json",
         }
+
+    @app.api_route("/downloads/sets/{asset_id}/{format_key}", methods=["GET", "HEAD"])
+    def print_set_download(asset_id: str, format_key: str, request: Request):
+        import re
+
+        asset = next(
+            (
+                a
+                for a in store.state()["workspace"]["assets"]
+                if a["id"] == asset_id and a["role"] in ("print", "test")
+            ),
+            None,
+        )
+        if not asset:
+            raise Missing("Unknown print set")
+        row = store.get(asset["revision"])
+        if row["status"] != "ready" or not row["result"]["report"]["valid"]:
+            raise Conflict("Print set unavailable")
+        if format_key == "instructions.txt":
+            body = asset["note"].encode("utf-8")
+            return Response(
+                body if request.method == "GET" else b"",
+                media_type="text/plain",
+                headers={
+                    "Content-Disposition": 'attachment; filename="instructions.txt"',
+                    "Content-Length": str(len(body)),
+                    "X-CAD-Revision": asset["revision"],
+                },
+            )
+        filename = row["result"]["exports"].get(format_key)
+        if not filename:
+            raise Missing("Format unavailable")
+        path = store.directory(asset["revision"]) / filename
+        if not path.is_file():
+            raise Missing("Artifact missing")
+        stem = re.sub(r"[^A-Za-z0-9_-]+", "-", asset["name"]).strip("-")[:65] or "part"
+        suffix = re.sub(r"[^A-Za-z0-9_-]+", "-", format_key)
+        return FileResponse(path, filename=f"{stem}-{suffix}.{filename.rsplit('.', 1)[-1]}")
 
     @app.api_route("/api/revisions/{revision}/artifacts/{filename}", methods=["GET", "HEAD"])
     @app.api_route("/downloads/{revision}/{filename}", methods=["GET", "HEAD"])

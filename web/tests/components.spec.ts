@@ -8,6 +8,7 @@ for(const mobile of [false,true]) test(`component reference library and safe cha
   page.on('request',request=>{if(request.method()==='POST')writes.push(request.url());});
   await page.goto('/');
   await expect(page.locator('#chat-panel')).toBeVisible();
+  await page.locator('#open-files').click();
   await page.getByRole('button',{name:'Components',exact:false}).click();
   const library=page.getByRole('dialog',{name:'Components'});
   await expect(library).toBeVisible();
@@ -24,6 +25,7 @@ for(const mobile of [false,true]) test(`component reference library and safe cha
   await expect(library).not.toBeVisible();
   await expect(page.locator('#chat-input')).toHaveValue(/Do not publish without my confirmation/);
   expect(writes).toEqual([]);
+  await page.locator('#open-files').click();
   await page.locator('#open-components').click();
   await library.getByLabel('Search components').fill('floor');
   await expect(library.locator('.component-card')).toHaveCount(1);

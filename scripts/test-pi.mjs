@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve, join, dirname } from "node:path";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import {tmpdir} from 'node:os';
 import { pathToFileURL } from "node:url";
 function findPi() {
   if (process.env.PI_PACKAGE_DIR) return process.env.PI_PACKAGE_DIR;
@@ -34,7 +35,7 @@ const loaded = await loadExtensions(
 );
 assert.deepEqual(loaded.errors, []);
 const tools = loaded.extensions[0].tools;
-assert.equal(tools.size, 15);
+assert.equal(tools.size, 17);
 async function raw(name, params) {
   return tools
     .get(name)
@@ -257,6 +258,24 @@ try {
 } finally {
   globalThis.fetch = originalFetch;
 }
+const originalCwd=process.cwd();
+const gitRepo=mkdtempSync(join(tmpdir(),'cad-commit-test-'));
+try {
+  process.chdir(gitRepo);
+  execFileSync('git',['init','-q']);
+  execFileSync('git',['config','user.email','test@example.invalid']);execFileSync('git',['config','user.name','Test']);
+  writeFileSync('document.json',JSON.stringify(doc));execFileSync('git',['add','document.json']);execFileSync('git',['commit','-qm','Source snapshot']);
+  const before=await call('cad_inspect');
+  const input={revision:candidate.revision,base_revision:before.revision,expected_generation:before.workspace.generation,name:'Create enclosure',icon:'📦',source_file:'document.json',request_key:randomUUID()};
+  const committed=await call('cad_commit',input);
+  assert.equal(committed.name,'Create enclosure');assert.equal(committed.icon,'📦');
+  assert.equal((await call('cad_commit',input)).id,committed.id);
+  const asset=await call('cad_attach',{commit:committed.id,revision:changed.revision,role:'test',name:'Test variant',request_key:randomUUID()});
+  assert.equal(asset.role,'test');
+  const after=await call('cad_inspect');assert.equal(after.workspace.revision,candidate.revision);assert.equal(after.generation,before.generation);assert.equal(after.workspace.commits.length,1);
+  writeFileSync('document.json',JSON.stringify({...doc,name:'Dirty source'}));
+  await assert.rejects(()=>call('cad_commit',{...input,request_key:randomUUID()}),/Commit tracked source/);
+} finally {process.chdir(originalCwd);rmSync(gitRepo,{recursive:true,force:true});}
 console.log(
-  "Pi integration passed: 15 tools loaded; capabilities, tree, component inspection, idempotent build, measure, validate, render, publish, parameter edit, export discovery/four exports, history, cancel, restore; automatic image checkpoints, compaction reset, pre-publication review, legacy fallback and missing-image handling.",
+  "Pi integration passed: 17 tools loaded; design commits with Git/source verification, named emoji metadata, output attachments and dirty-source rejection; capabilities, tree, component inspection, idempotent build, measure, validate, render, publish, parameter edit, export discovery/four exports, history, cancel, restore; automatic image checkpoints, compaction reset, pre-publication review, legacy fallback and missing-image handling.",
 );

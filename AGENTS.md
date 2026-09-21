@@ -1,6 +1,6 @@
 # 3d-pi modeling guide
 
-This project is a local agent-driven CAD application. All geometry changes go through the CAD API/pi tools; the browser is a read-only model viewer with camera navigation.
+This project is a local agent-driven CAD application. All geometry changes go through the CAD API/pi tools; the browser shares model/part context with pi, with camera/clipping controls, a bottom design timeline and named file sets.
 
 ## Project scope
 
@@ -16,7 +16,7 @@ remain unchanged: rebuild at the destination generation before publication.
 2. Read `cad_capabilities` for live service limits and `cad_tree` / `cad_component_inspect` for part/feature/mating context. Parameter consumers are conservative source-scope references, not independently editable component instances. For new models, use `cad_schema` and `cad_example`.
 3. `cad_build` with a complete JSON document, or `cad_parameters` for existing parameter changes. Both create candidates without publishing.
 4. Examine automatically attached isometric/top/front and optional exploded images on first inspections and ready builds. Use `cad_render` (default multi-view review) if images are missing, after compaction, or for another look. These are preview images, not hidden-line drawings. Use `cad_measure` (optionally one part) and `cad_validate` (summary, checks, mesh, exports, assembly or all) to inspect the exact candidate. Check requested dimensions and intent; kernel validity is not proof of design correctness or physical strength. Mesh measurements are not exact B-rep measurements.
-5. `cad_publish` only after verification, using the generation read before building. Publish/restore can return `visual_review_required` with images and no mutation: inspect them, then explicitly retry with the original generation. Image delivery is not proof of design correctness. The browser updates only after actual publication.
+5. For an actual requested design change, commit its JSON source to clean project Git and call `cad_commit` with a concise `name`, a Unicode `icon`, `source_file`, original `workspace.generation` and `base_revision`. The browser follows this explicit working pointer, never the newest build. Register inspection/print/test outputs with `cad_attach`; these do not create design timeline entries. Commit/publish/restore may return `visual_review_required`: inspect the images, then explicitly retry with the original generation. `cad_publish` remains separate and requires explicit permission; its generation is the legacy publication generation, not workspace generation.
 6. `cad_export` without a format lists available files; with a format it returns revision-bound links. Internal loopback links are not public URLs; use the authenticated website-relative path for users. DXF requires a named section. `cad_restore` explicitly republishes a previously published revision without deleting history.
 7. `wait=false` submits a build for polling with `cad_inspect`; `cad_cancel` stops an unfinished candidate, not publications. If submission is uncertain, reuse its request key with identical input, or inspect history. Do not duplicate work with fresh keys while a known build is still running.
 
@@ -91,8 +91,8 @@ If a build fails, inspect its diagnostics. Never silently change a user's reques
 - This directory is now a Git repository. Commit small, verified milestones regularly, including code, tests, documentation and changed parametric example/source documents. Make a checkpoint before substantial refactors or deployment migrations; use descriptive commit messages.
 - Do not commit credentials, sessions, runtime SQLite databases, generated CAD artifacts, caches or dependencies. Do not push anywhere without an explicitly configured/approved remote.
 - Preserve published history: do not rewrite prior commits or use a destructive reset to implement a model restore. Inspect older code with `git show` or a separate worktree. A Git checkout does not roll back the runtime CAD database.
-- The browser timeline is the CAD publication history, not the application's Git commit log. Browsing or scrubbing it only changes the viewed revision; it must never publish/restore or mutate geometry. Historical downloads must reference the selected immutable revision. Returning to Latest resumes following new publications.
-- Existing pre-Git model history is retained as CAD revisions; do not pretend it consists of historical Git commits. Project-scoped Git source snapshots/provenance are a planned workspace feature.
+- The bottom timeline records explicit CAD design commits with names/icons and verified source-document references, not every tool call or application Git commit. Existing publications remain labelled legacy entries. Browsing changes only the view; returning to Working design follows the explicit pointer. Historical downloads remain immutable.
+- Pre-existing geometry/history is retained, not rewritten or presented as fabricated Git commits. Source-document equality is checked by the service; the agent verifies clean Git HEAD. Related outputs retain their own immutable CAD documents. Do not claim distributed atomicity or automatic feature replay.
 
 ## Development
 

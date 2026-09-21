@@ -37,6 +37,9 @@ class Store:
                     generation INTEGER PRIMARY KEY, revision TEXT NOT NULL,
                     operation TEXT NOT NULL, created REAL NOT NULL);
             """)
+            from cad.workspace import DDL
+
+            db.executescript(DDL)
 
     @contextmanager
     def connection(self):
@@ -69,7 +72,7 @@ class Store:
             state["history"] = [
                 dict(r)
                 for r in db.execute(
-                    "SELECT id,parent,base_generation,created,status FROM revisions ORDER BY created DESC LIMIT 100"
+                    "SELECT id,parent,base_generation,created,status,json_extract(document, '$.name') AS name FROM revisions ORDER BY created DESC LIMIT 100"
                 )
             ]
             state["publications"] = [
@@ -78,6 +81,21 @@ class Store:
                     FROM publications p JOIN revisions r ON r.id=p.revision
                     ORDER BY p.generation DESC""")
             ]
+            from cad.workspace import snapshot
+
+            state["workspace"] = snapshot(db)
+            registered = {
+                r["revision"]
+                for r in state["workspace"]["commits"]
+                + state["workspace"]["assets"]
+                + state["publications"]
+            }
+            state["candidates"] = [
+                r["id"]
+                for r in state["history"]
+                if r["status"] == "ready" and r["id"] not in registered
+            ]
+            state["candidate_names"] = {r["id"]: r["name"] for r in state["history"]}
             return state
 
     def create(self, document, expected_generation, request_key):

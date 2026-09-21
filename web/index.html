@@ -25,30 +25,25 @@
       <aside>
         <p class="eyebrow">ACTIVE DOCUMENT</p>
         <h1 id="title">Your next idea.</h1>
-        <p class="subtext">Modeled through pi. Inspected here.</p>
         <div class="revision">
           <span id="revision">No published revision</span
           ><span class="badge">mm · Z-up</span>
         </div>
         <section aria-label="Design timeline">
           <h2>Design timeline</h2>
-          <label for="draft-select">Preview</label>
           <select id="draft-select"><option value="">Published model</option></select>
           <div class="timeline-controls">
-            <button id="timeline-previous" disabled>Previous</button>
-            <button id="timeline-next" disabled>Next</button>
-            <button id="timeline-latest" disabled>Latest</button>
+            <button id="timeline-previous" title="Previous change" aria-label="Previous change" disabled>◀</button>
+            <button id="timeline-next" title="Next change" aria-label="Next change" disabled>▶</button>
+            <button id="timeline-latest" title="Working design" aria-label="Working design" disabled>▶|</button>
           </div>
           <label class="sr-only" for="timeline-position">Published version</label>
           <input id="timeline-position" type="range" min="0" max="0" value="0" step="1" disabled />
           <p id="timeline-status" class="hint" role="status">No published versions.</p>
-          <details>
-            <summary>Choose a version</summary>
-            <ol id="history"></ol>
-          </details>
-          <p class="hint">Browsing only—does not restore or change the saved model.</p>
+          <ol id="history" aria-label="Design commits"></ol>
+          <button id="timeline-working">Working design</button>
         </section>
-        <section>
+        <section id="parts-container">
           <h2>Parts <span id="part-count"></span></h2>
           <div id="parts" class="stack">
             <p class="muted">Named solids will appear here.</p>
@@ -77,17 +72,15 @@
           ><button data-view="top">Top <kbd>2</kbd></button
           ><button data-view="front">Front <kbd>3</kbd></button
           ><button id="fit">Fit <kbd>F</kbd></button
-          ><button id="explode" hidden>Explode</button>
+          ><button id="explode" hidden>Explode</button><button id="section-view" aria-pressed="false" title="Visual clipping only; does not change geometry or exports">Section</button>
         </nav>
         <div id="empty">
           <span class="empty-icon">◈</span>
-          <h2>A viewport for your ideas.</h2>
+          <h2>No working design yet.</h2>
           <p>
-            Ask pi to create a model, or run<br /><code
-              >uv run python -m cad.cli demo</code
-            >
+            Ask pi to create a design or commit an existing model.
           </p>
-          <p class="hint">Describe your design to pi, or explore the component library.</p>
+
         </div>
         <div id="notice" role="status"></div>
         <footer>
@@ -96,7 +89,7 @@
         </footer>
       </div>
       <section id="chat-panel" aria-label="Chat with pi" hidden>
-        <div class="chat-heading"><h2>Work with pi</h2><small id="chat-model"></small></div>
+        <div class="chat-heading"><h2>π</h2><small id="chat-model"></small></div>
         <div id="chat-messages" aria-label="Conversation"></div>
         <p id="chat-status" class="hint" role="status">Connecting to pi…</p>
         <form id="chat-form">

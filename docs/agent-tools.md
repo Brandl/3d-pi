@@ -1,6 +1,6 @@
 # CAD agent tools
 
-The web pi agent has 15 custom CAD tools, plus its regular container-local coding tools. These do not grant deployment access. Geometry remains declarative, builds remain bounded and publication remains explicit.
+The web pi agent has 17 custom CAD tools, plus its regular container-local coding tools. These do not grant deployment access. Geometry remains declarative, builds remain bounded and publication remains explicit.
 
 ## Read and navigate
 
@@ -24,7 +24,7 @@ The browser uses the same `/api/revisions/{revision}/tree` and `/components/{id}
 | Tool | Contract |
 | --- | --- |
 | `cad_build` | Full `document_json` and `expected_generation`. Optional stable `request_key` and `wait=false`. Returns candidate ID, status, base generation and next steps rather than dumping every report. |
-| `cad_parameters` | Nonempty object of changes to existing **design-global** parameters, applied to the currently published document. Same generation/idempotency/wait controls. No implicit new parameters or edits to historical selections. |
+| `cad_parameters` | Nonempty object of changes to existing **design-global** parameters, applied to the explicit working document (or legacy publication if no working commit exists). Requires the current workspace generation when there is a design commit. Same generation/idempotency/wait controls. No implicit new parameters or edits to historical selections. |
 | `cad_cancel` | Explicit revision. Cancels queued/running work; finished work is reported without changes. It never rolls back a publication. |
 | `cad_measure` | Whole-part measurements and assembly dimensions; optional part filter. Retains measurement basis. Analytic masters use validated mesh measurements, not exact B-reps. Part volume is not automatically plaster-cavity volume. |
 | `cad_validate` | Summary by default; sections `checks`, `mesh`, `exports`, `assembly`, `all`. No claim that modeled checks certify physical strength, fit or leak-tightness. |
@@ -36,6 +36,8 @@ If submission is uncertain, the error contains its request key: inspect history 
 
 | Tool | Contract |
 | --- | --- |
+| `cad_commit` | Actual design changes only. Requires concise `name`, Unicode `icon`, `source_file`, original workspace generation and `base_revision`. Reads clean project Git HEAD; normalized committed JSON must match the immutable ready CAD result. Idempotent; does not publish. Visual checkpoint required. |
+| `cad_attach` | Attach a named `inspection`, `print`, or `test` output to a design commit. No working-pointer or timeline change. Explain manufacturing omissions, orientations and limitations in the note. |
 | `cad_publish` | Ready validated candidate plus expected generation. Verify measurements, assembly/export checks and renders first. The service checks that candidate base generation still matches; do not bypass stale work by merely changing the number. |
 | `cad_restore` | Explicit earlier publication plus current generation. Creates a new publication; browsing is never permission to restore. |
 | `cad_export` | Without format, lists available export keys/files. With format, resolves a specific artifact and manifest. Includes an authenticated website-relative download path; the internal loopback URL is not a public share link. Does not send files externally. |
@@ -44,4 +46,4 @@ Primary tool summaries are bounded JSON; visual checkpoints add captioned image/
 
 ## Validation
 
-`tests/test_introspection.py` checks stable unique IDs, valid relationships, generic dependencies, shared parameters, missing measurements, API lookup and published-only gateway access. `scripts/test-pi.mjs` loads the actual pi extension and exercises all 15 tools, including idempotent submission, history pages, early cancellation and no-op cancellation of completed work. Run that script against an **isolated** data directory/port: it intentionally builds, publishes and restores test models. Never run it against live project data. Browser tests check that the tree follows an immutable revision and stale component responses cannot overwrite newer selections.
+`tests/test_introspection.py` checks stable unique IDs, valid relationships, generic dependencies, shared parameters, missing measurements, API lookup and published-only gateway access. `scripts/test-pi.mjs` loads the actual pi extension and exercises all 17 tools, including idempotent submission, history pages, early cancellation and no-op cancellation of completed work. Run that script against an **isolated** data directory/port: it intentionally builds, publishes and restores test models. Never run it against live project data. Browser tests check that the tree follows an immutable revision and stale component responses cannot overwrite newer selections.

@@ -62,10 +62,10 @@ Without `--publish`, `build` only creates a candidate. The demo command explicit
 - Exact bounding dimensions, areas, volumes, solid counts, kernel validity, and explicit numerical design assertions.
 - Candidate builds in separate processes, bounded job queue, cancellation, deadlines, and worker resource limits.
 - Atomic publication, optimistic generation checks, request-key deduplication, and restoration without deleting history.
-- WebSocket-driven browser updates, reconnect recovery, CAD edge overlays, and preservation of the last published geometry on failure.
+- WebSocket-driven browser updates, reconnect recovery, CAD edge overlays, and preservation of the working geometry on failure.
 - STEP, STL, 3MF, and named XY-section DXF exports bound to exact revisions.
 - Revision-bound isometric, top, and front PNG inspection images.
-- Fifteen native pi tools: `cad_capabilities`, `cad_schema`, `cad_example`, `cad_inspect`, `cad_tree`, `cad_component_inspect`, `cad_build`, `cad_parameters`, `cad_cancel`, `cad_measure`, `cad_validate`, `cad_render`, `cad_publish`, `cad_restore`, `cad_export`. See [tool contracts](docs/agent-tools.md).
+- Seventeen native pi tools (including `cad_commit` and `cad_attach`): `cad_capabilities`, `cad_schema`, `cad_example`, `cad_inspect`, `cad_tree`, `cad_component_inspect`, `cad_build`, `cad_parameters`, `cad_cancel`, `cad_measure`, `cad_validate`, `cad_render`, `cad_publish`, `cad_restore`, `cad_export`. See [tool contracts](docs/agent-tools.md).
 
 ## Analytic example: B-01 Gentle Twist
 
@@ -242,9 +242,9 @@ See `todo.md` and `milestones.md` for the longer-term plan and current progress.
 
 ## History and checkpoints
 
-The viewer's **Design timeline** lets you step Previous/Next, scrub through published versions, choose a named version, or return to **Latest**. Selected historical versions stay pinned even when a newer design is published; the `?version=<generation>` URL preserves the selection on reload. Geometry, parameters and downloads all follow the viewed revision. Browsing does not restore or publish anything—ask the agent to restore a version when you want to make it current.
+The bottom **Design timeline** shows named, Unicode-icon-labelled design commits and labelled legacy publications. Click or step through entries; **Working design** returns to the explicit editing head. Browsing never restores or commits. New builds and fixtures cannot take over the model. Related inspection views use the representation selector; named print/test sets and downloadable instructions live in **Files**. Part selection is shared with pi, and WebGL offers visual section clipping (not a capped B-rep section or changed export).
 
-Application code, tests, documentation and parametric examples are tracked in local Git. `cad-prototype-v0` tags the working prototype before the workspace migration. Commit verified milestones regularly. The CAD timeline is publication history, not the application Git log: existing pre-Git revisions have not been retroactively presented as commits. Project-level source-commit provenance is planned in [the workspace plan](docs/workspace-plan.md).
+Application code, tests, documentation and parametric examples are tracked in local Git. `cad-prototype-v0` tags the working prototype before the workspace migration. Commit verified milestones regularly. The CAD timeline is not the application Git log. New design commits bind a clean project Git source JSON to a matching immutable CAD revision; old publications are not fabricated Git commits. See [project and commit contracts](docs/projects.md).
 
 Runtime databases and generated artifacts are deliberately excluded from Git and still need backups. A Git checkout alone does not restore runtime data; inspecting old code in a separate worktree avoids changing a running service. No Git remote is configured automatically.
 
@@ -252,7 +252,7 @@ Runtime databases and generated artifacts are deliberately excluded from Git and
 
 The gateway now **fails closed without a configured password**. Every preview, artifact, asset, WebSocket and agent endpoint requires authentication. The website includes a persistent pi conversation; authenticated prompts can change models through pi's CAD tools. This is a single trusted owner's interface, not anonymous sharing or multi-user accounts.
 
-The CAD-workbench layout includes a command ribbon, model browser, central viewport, bottom publication timeline and pi side panel. **Components** opens the reference library: slide-lock and captured-floor instructions, draft parameters, implementation source and validation notes. Preparing a request only drafts a message for pi; it never inserts or publishes geometry automatically. The header provides folder-project navigation/creation and pi transcript downloads; ready candidates are explicitly distinguished from publications. Persistent component releases/instances remain planned; see [component-library scope](docs/component-library.md).
+The shared workspace keeps the physical model, parts and pi conversation together. History sits below the model; there is no prescribed stage sequence. **Files** includes named outputs, instructions, other build previews, the transcript and **Components** reference library. Parameter requests and historical restores can be drafted to pi without silently mutating the model. Persistent component releases/instances remain planned; see [component-library scope](docs/component-library.md).
 
 Pi automatically receives multi-view image checkpoints on first inspection and successful builds. New builds include distinct-colour inspection renders with part legends; old revisions use their existing images. Publication remains explicit, and dotted hidden-line rendering is not implemented. See [visual review behaviour](docs/visual-review.md).
 
@@ -264,7 +264,7 @@ CAD_PASSWORD_HASH_FILE=/secure/location/password.json uv run uvicorn cad.preview
 cloudflared tunnel --url http://127.0.0.1:8767
 ```
 
-Tunnel **only the gateway**, through HTTPS, never the private modeling API or agent bridge. A Quick Tunnel address is temporary; possession of its URL no longer grants access. `/downloads/latest.zip` and `/downloads/{revision}/{filename}` retain GET/HEAD, ranges and attachment filenames but now require login. The gateway still serves only published artifacts and does not directly proxy CAD mutation routes. Geometry changes go through the authenticated agent. Polling/PNG fallbacks and non-mutating historical browsing remain available.
+Tunnel **only the gateway**, through HTTPS, never the private modeling API or agent bridge. A Quick Tunnel address is temporary; possession of its URL no longer grants access. `/downloads/latest.zip` and `/downloads/{revision}/{filename}` retain GET/HEAD, ranges and attachment filenames but now require login. The gateway serves legacy publications and authenticated project candidates/registered outputs, but does not directly proxy CAD mutation routes. Geometry changes go through the authenticated agent. Polling/PNG fallbacks and non-mutating historical browsing remain available.
 
 ## Dependency licensing
 

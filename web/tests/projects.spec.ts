@@ -14,9 +14,12 @@ test('project navigation, candidate preview, creation and transcript download',a
   await expect(page.locator('#project-select')).toHaveValue(existing.id);
   const candidates=await page.locator('#draft-select option').evaluateAll(options=>options.map(o=>(o as HTMLOptionElement).value).filter(Boolean));
   expect(candidates.length).toBeGreaterThan(0);
+  await page.locator('#open-files').click();
+  await page.getByText('Other build outputs',{exact:true}).click();
   await page.locator('#draft-select').selectOption(candidates[0]);
+  await page.keyboard.press('Escape');
   await expect(page.locator('#viewport')).toHaveAttribute('data-revision',candidates[0]);
-  await expect(page.locator('#timeline-status')).toContainText('UNPUBLISHED');
+  await expect(page.locator('#timeline-status')).toContainText('Build preview');
   const state=await page.evaluate(async id=>(await fetch(`/projects/${id}/api/state`)).json(),existing.id);
   expect(state.revision).toBe(original);
   await expect(page.locator('#chat-status')).toHaveText('Ready');
@@ -27,8 +30,10 @@ test('project navigation, candidate preview, creation and transcript download',a
   await expect(page.locator('#empty')).toBeVisible();
   await expect(page.locator('#chat-status')).toHaveText('Ready');
   await expect(page.locator('#chat-messages .chat-message')).toHaveCount(0);
+  await page.locator('#open-files').click();
   const download=page.waitForEvent('download');await page.locator('#project-transcript').click();
   expect((await download).suggestedFilename()).toBe('pi-transcript.md');
+  await page.keyboard.press('Escape');
   await page.locator('#project-select').selectOption(existing.id);
   await expect(page.locator('#viewport')).toHaveAttribute('data-revision',original!);
 });

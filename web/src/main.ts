@@ -1,4 +1,5 @@
 import {projectPath} from './project-path';
+import {createHistory, type Workspace} from './design-history';
 import './projects';
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -33,6 +34,8 @@ type State = {
   history: { id: string; status: string }[];
   publications?: Publication[];
   candidates?: string[];
+  candidate_names?: Record<string,string>;
+  workspace?: Workspace | null;
 };
 type Part = {
   x: number;
@@ -133,10 +136,25 @@ scene.add(grid);
 scene.add(new THREE.AxesHelper(20));
 let model = new THREE.Group();
 scene.add(model);
+function highlight(part:string|null){
+  for(const group of model.children)group.traverse(object=>{if(object instanceof THREE.Mesh){const materials=Array.isArray(object.material)?object.material:[object.material];for(const material of materials)if(material instanceof THREE.MeshStandardMaterial)material.emissive.setHex(group.name===part?0x284b31:0x000000);}});
+}
+window.addEventListener('cad:selection',event=>{const detail=(event as CustomEvent).detail;highlight(detail.part??null);});
+if(renderer){
+  let down={x:0,y:0};
+  renderer.domElement.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY};});
+  renderer.domElement.addEventListener('pointerup',e=>{if(e.button!==0||Math.hypot(e.clientX-down.x,e.clientY-down.y)>4)return;const rect=renderer.domElement.getBoundingClientRect();const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),camera);const hit=ray.intersectObjects(model.children,true).find(h=>h.object instanceof THREE.Mesh);if(hit)window.dispatchEvent(new CustomEvent('cad:pick',{detail:{part:hit.object.name}}));});
+}
 let radius = 100;
 let center = new THREE.Vector3(0, 0, 0);
 let currentView = "iso";
 let exploded = false;
+let sectioned = false;
+const sectionPlane = new THREE.Plane(new THREE.Vector3(-1,0,0),0);
+const sectionButton=$('section-view') as HTMLButtonElement;
+sectionButton.disabled=!renderer;
+if(!renderer)sectionButton.title='Section requires WebGL; image fallback does not support clipping';
+sectionButton.onclick=()=>{sectioned=!sectioned;sectionButton.setAttribute('aria-pressed',String(sectioned));viewport.dataset.sectioned=String(sectioned);if(renderer){sectionPlane.constant=center.x;renderer.clippingPlanes=sectioned?[sectionPlane]:[];}};
 function layoutModel() {
   for (const part of model.children) {
     const offset = exploded
@@ -164,6 +182,7 @@ function layoutModel() {
   const sphere = bounds.getBoundingSphere(new THREE.Sphere());
   radius = Math.max(sphere.radius, 1);
   center = sphere.center;
+  sectionPlane.constant=center.x;
 }
 $("explode").onclick = () => {
   exploded = !exploded;
@@ -306,7 +325,10 @@ function createModel(preview: Preview) {
   return group;
 }
 function details(row: Revision) {
-  $("title").textContent = row.document.name;
+  const named=latest?.workspace?.commits.find(c=>c.revision===row.id);
+  const related=latest?.workspace?.assets.find(a=>a.revision===row.id);
+  $("title").textContent = related?.name ?? named?.name ?? row.document.name;
+  $("title").title=row.document.name;
   $("revision").textContent = `Revision ${row.id.slice(0, 8)}`;
   $("part-count").textContent = String(
     Object.keys(row.result.report.parts).length,
@@ -350,7 +372,8 @@ function details(row: Revision) {
     const term = document.createElement("dt");
     term.textContent = key;
     const val = document.createElement("dd");
-    val.textContent = format(value);
+    const input=document.createElement('input');input.type='number';input.step='any';input.value=String(value);input.setAttribute('aria-label',`Parameter ${key}`);input.style.width='85px';
+    const change=document.createElement('button');change.textContent='Ask π';change.type='button';change.onclick=()=>{if(input.value&&!Number.isNaN(input.valueAsNumber))window.dispatchEvent(new CustomEvent('cad:draft',{detail:{text:`Change parameter ${key} from ${value} to ${input.valueAsNumber}. I am viewing ${row.id}; check the working design and affected parts before applying. Preserve other dimensions.`}}));};val.append(input,change);
     $("parameters").append(term, val);
   }
   const previousType = exportType.value;
@@ -379,112 +402,14 @@ let loading: string | null = null;
 let generation = -1;
 let latest: State;
 let loadError = "";
-function versionFromUrl(): number | null {
-  const value = Number(new URL(location.href).searchParams.get("version"));
-  return Number.isSafeInteger(value) && value > 0 ? value : null;
-}
-let selectedVersion = versionFromUrl();
-let candidate = new URL(location.href).searchParams.get('candidate');
-const draftSelect = $('draft-select') as HTMLSelectElement;
-draftSelect.addEventListener('change',()=>{
-  const url=new URL(location.href);url.searchParams.delete('version');
-  if(draftSelect.value)url.searchParams.set('candidate',draftSelect.value);else url.searchParams.delete('candidate');
-  location.assign(url);
-});
-let timeline: Publication[] = [];
-let timelineKey = "";
-let selectionWarning = "";
-const timelinePosition = $("timeline-position") as HTMLInputElement;
-function chooseVersion(version: number | null) {
-  selectedVersion = version;
-  candidate = null;
-  selectionWarning = "";
-  loadError = "";
-  const url = new URL(location.href);
-  url.searchParams.delete('candidate');
-  if (version === null) url.searchParams.delete("version");
-  else url.searchParams.set("version", String(version));
-  history.replaceState(null, "", url);
-  if (latest) void update(latest);
-}
-function timelineIndex() {
-  return selectedVersion === null ? timeline.length - 1 : timeline.findIndex(p => p.generation === selectedVersion);
-}
-$("timeline-previous").addEventListener("click", () => {
-  const entry = timeline[timelineIndex() - 1];
-  if (entry) chooseVersion(entry.generation);
-});
-$("timeline-next").addEventListener("click", () => {
-  const entry = timeline[timelineIndex() + 1];
-  if (entry) chooseVersion(entry.generation);
-});
-$("timeline-latest").addEventListener("click", () => chooseVersion(null));
-timelinePosition.addEventListener("input", () => {
-  const entry = timeline[Number(timelinePosition.value)];
-  if (entry) chooseVersion(entry.generation);
-});
-window.addEventListener("popstate", () => {
-  selectedVersion = versionFromUrl();
-  selectionWarning = "";
-  if (latest) void update(latest);
-});
-function renderTimeline(state: State) {
-  timeline = [...(state.publications ?? (state.revision ? [{
-    generation: state.generation, revision: state.revision, operation: "publish",
-  }] : []))].sort((a,b) => a.generation-b.generation);
-  if (selectedVersion !== null && !timeline.some(p => p.generation === selectedVersion)) {
-    selectionWarning = `Version ${selectedVersion} is unavailable; showing latest. `;
-    selectedVersion = null;
-  }
-  const index = timelineIndex();
-  const entry = timeline[index];
-  const candidates = state.candidates ?? [];
-  if(candidate && !candidates.includes(candidate))candidate=null;
-  if(!state.revision && !candidate)candidate=candidates[0]??null;
-  desired = candidate ?? entry?.revision ?? state.revision;
-  draftSelect.replaceChildren(new Option('Published model',''));
-  for(const id of candidates)draftSelect.add(new Option('Unpublished · '+id.slice(0,8),id));
-  draftSelect.value=candidate??'';
-  const key = JSON.stringify(timeline);
-  if (key !== timelineKey) {
-    timelineKey = key;
-    $("history").replaceChildren();
-    for (const publication of [...timeline].reverse()) {
-      const item = document.createElement("li");
-      item.dataset.version = String(publication.generation);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = `v${publication.generation} · ${publication.name || publication.revision.slice(0,8)}`;
-      const meta = document.createElement("small");
-      meta.textContent = `${publication.operation === "restore" ? "Restored · " : ""}${publication.revision.slice(0,8)}${publication.created ? " · " + new Date(publication.created * 1000).toLocaleString() : ""}`;
-      button.append(meta);
-      button.addEventListener("click", () => chooseVersion(publication.generation));
-      item.append(button);
-      $("history").append(item);
-    }
-  }
-  for (const item of Array.from($("history").querySelectorAll<HTMLLIElement>("li"))) {
-    const selected = Number(item.dataset.version) === entry?.generation;
-    item.classList.toggle("current", selected);
-    item.querySelector("button")!.setAttribute("aria-pressed", String(selected));
-  }
-  timelinePosition.max = String(Math.max(0, timeline.length-1));
-  timelinePosition.value = String(Math.max(0, index));
-  timelinePosition.disabled = timeline.length < 2;
-  timelinePosition.setAttribute("aria-valuetext", entry ? `Version ${entry.generation}: ${entry.name || entry.revision.slice(0,8)}` : "No published versions");
-  ($("timeline-previous") as HTMLButtonElement).disabled = index <= 0;
-  ($("timeline-next") as HTMLButtonElement).disabled = index < 0 || index >= timeline.length-1;
-  ($("timeline-latest") as HTMLButtonElement).disabled = selectedVersion === null;
-  const status = candidate ? 'UNPUBLISHED CANDIDATE · '+candidate.slice(0,8)+' · browsing does not publish' : selectionWarning + (entry
-    ? selectedVersion === null ? `Following latest · v${entry.generation}` : `Viewing v${entry.generation} · pinned · latest is v${state.generation}`
-    : "No published versions.");
-  if ($("timeline-status").textContent !== status) $("timeline-status").textContent = status;
-}
+let workspaceGeneration = -1;
+const renderTimeline = createHistory(()=>{loadError='';if(latest)void update(latest);});
 async function update(state: State) {
-  if (state.generation < generation) return;
+  if (state.generation < generation || (state.workspace?.generation??0) < workspaceGeneration) return;
   latest = state;
   generation = state.generation;
-  renderTimeline(state);
+  workspaceGeneration = state.workspace?.generation??0;
+  desired = renderTimeline(state);
   const building = state.history.filter((row) =>
     ["queued", "building"].includes(row.status),
   );
@@ -492,11 +417,16 @@ async function update(state: State) {
   $("notice").textContent =
     loadError ||
     (building.length
-      ? `${building.length} build(s) in progress · showing last published revision`
+      ? `${building.length} build(s) in progress · working design unchanged`
       : failed
-        ? "Latest build failed. Published geometry is unchanged; ask pi for diagnostics."
+        ? "Build failed. Working design unchanged."
         : "");
-  if (!desired || desired === loaded || desired === loading) return;
+  if (!desired) {
+    if (loaded) {scene.remove(model);dispose(model);model=new THREE.Group();scene.add(model);loaded=null;delete viewport.dataset.revision;delete viewport.dataset.part;}
+    $('empty').hidden=false;fallbackImage.hidden=true;$('title').textContent='No working design';$('revision').textContent='';$('geometry-status').textContent='';
+    return;
+  }
+  if (desired === loaded || desired === loading) return;
   const id = desired;
   loading = id;
   try {
@@ -515,8 +445,9 @@ async function update(state: State) {
     $("explode").hidden = !hasTooling;
     if (!hasTooling) exploded = false;
     $("explode").textContent = exploded ? "Assemble" : "Explode";
+    sectioned=false;sectionButton.setAttribute('aria-pressed','false');viewport.dataset.sectioned='false';if(renderer)renderer.clippingPlanes=[];
     layoutModel();
-    if (first) view("iso");
+    view(first?'iso':currentView);
     loaded = id;
     loadError = "";
     details(row);
@@ -526,8 +457,9 @@ async function update(state: State) {
       0,
     );
     $("geometry-status").textContent = renderer
-      ? `${format(triangles)} preview triangles · checks passed`
+      ? `${format(triangles)} preview triangles · geometry checks only`
       : "WebGL unavailable · image preview · use the camera buttons";
+    delete viewport.dataset.part;delete viewport.dataset.component;
     viewport.dataset.revision = id;
     if (!renderer) updateFallbackImage(id);
   } catch (error) {
@@ -537,7 +469,7 @@ async function update(state: State) {
     $("notice").textContent =
       loadError ||
       (latest.history.some((r) => ["queued", "building"].includes(r.status))
-        ? "Build in progress · showing last published revision"
+        ? "Build in progress · working design unchanged"
         : "");
   }
 }

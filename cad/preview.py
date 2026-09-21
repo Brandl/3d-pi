@@ -43,8 +43,11 @@ def published(revision):
     if not re.fullmatch(r"[a-f0-9]{32}", revision):
         raise HTTPException(404)
     state = upstream("/api/state")
-    if project_id.get() and any(
-        r["id"] == revision and r["status"] == "ready" for r in state["history"]
+    workspace = state.get("workspace", {})
+    registered = {r["revision"] for r in workspace.get("commits", []) + workspace.get("assets", [])}
+    if project_id.get() and (
+        revision in registered
+        or any(r["id"] == revision and r["status"] == "ready" for r in state["history"])
     ):
         return upstream(f"/api/revisions/{revision}")
     if revision not in {p["revision"] for p in state["publications"]}:
@@ -55,19 +58,26 @@ def published(revision):
 @app.get("/api/state")
 def state():
     data = upstream("/api/state")
-    # Do not disclose unpublished build history, failures, or source documents.
+    # Authenticated project workspaces get build status, never raw source documents.
     return {
         "revision": data["revision"],
         "generation": data["generation"],
-        "candidates": [
-            r["id"]
-            for r in data["history"]
-            if r["status"] == "ready"
-            and r["id"] not in {p["revision"] for p in data["publications"]}
-        ]
+        "workspace": data.get("workspace") if project_id.get() else None,
+        "candidate_names": {r["id"]: r.get("name", r["id"][:8]) for r in data["history"]}
+        if project_id.get()
+        else {},
+        "candidates": data.get(
+            "candidates",
+            [
+                r["id"]
+                for r in data["history"]
+                if r["status"] == "ready"
+                and r["id"] not in {p["revision"] for p in data["publications"]}
+            ],
+        )
         if project_id.get()
         else [],
-        "history": [{"id": data["revision"], "status": "ready"}] if data["revision"] else [],
+        "history": ([{'id': r['id'], 'status': r['status']} for r in data['history']] if project_id.get() else ([{"id": data["revision"], "status": "ready"}] if data["revision"] else [])),
         "publications": [
             {
                 key: item.get(key)
@@ -182,6 +192,45 @@ def artifact(revision: str, filename: str, request: Request):
     }:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return Response(data, status_code=status, headers=headers)
+
+
+@app.api_route("/downloads/sets/{asset_id}/{format_key}", methods=["GET", "HEAD"])
+def named_download(asset_id: str, format_key: str, request: Request):
+    if not project_id.get():
+        raise HTTPException(404)
+    data = upstream("/api/state").get("workspace", {})
+    asset = next(
+        (
+            a
+            for a in data.get("assets", [])
+            if a["id"] == asset_id and a["role"] in ("print", "test")
+        ),
+        None,
+    )
+    if not asset:
+        raise HTTPException(404, "Unknown print set")
+    row = published(asset["revision"])
+    if format_key == "instructions.txt":
+        body = asset["note"].encode("utf-8")
+        return Response(
+            body if request.method == "GET" else b"",
+            media_type="text/plain",
+            headers={
+                "Content-Disposition": 'attachment; filename="instructions.txt"',
+                "Content-Length": str(len(body)),
+                "X-CAD-Revision": asset["revision"],
+            },
+        )
+    filename = row["result"]["exports"].get(format_key)
+    if not filename:
+        raise HTTPException(404, "Format unavailable")
+    response = artifact(asset["revision"], filename, request)
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "-", asset["name"]).strip("-")[:65] or "part"
+    suffix = re.sub(r"[^A-Za-z0-9_-]+", "-", format_key)
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="{stem}-{suffix}.{filename.rsplit(".", 1)[-1]}"'
+    )
+    return response
 
 
 @app.api_route("/downloads/latest.zip", methods=["GET", "HEAD"])

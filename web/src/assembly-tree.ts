@@ -24,6 +24,9 @@ let current = "",
   epoch = 0,
   selection = 0;
 async function inspect(node: TreeNode) {
+  viewport.dataset.component=node.id;viewport.dataset.part=node.name;
+  document.querySelectorAll<HTMLButtonElement>('[data-component]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.component===node.id)));
+  window.dispatchEvent(new CustomEvent('cad:selection',{detail:{part:node.id.startsWith('part:')?node.id.slice(5):null}}));
   const revision = current,
     version = epoch,
     chosen = ++selection;
@@ -124,13 +127,11 @@ async function update() {
     if (!response.ok) throw new Error("Tree unavailable");
     const data = await response.json();
     if (version !== epoch) return;
-    content.replaceChildren(render(data.root));
+    content.replaceChildren(render({...data.root,name:'Assembly'}));
     content.dataset.revision = revision;
     const note = document.createElement("p");
     note.className = "hint";
-    note.textContent =
-      "Parts, source features and logical interfaces—not installed library versions.";
-    content.append(note);
+    note.textContent = '';
   } catch {
     if (version === epoch) {
       content.textContent = "Hierarchy unavailable for this revision.";
@@ -142,4 +143,5 @@ new MutationObserver(() => void update()).observe(viewport, {
   attributes: true,
   attributeFilter: ["data-revision"],
 });
+window.addEventListener('cad:pick',event=>{const name=(event as CustomEvent).detail.part;const button=Array.from(content.querySelectorAll<HTMLButtonElement>('[data-component]')).find(b=>b.dataset.component==='part:'+name);button?.click();});
 void update();

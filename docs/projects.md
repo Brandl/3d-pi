@@ -13,11 +13,31 @@ another tab cannot retarget an in-flight agent turn. A busy turn blocks prompts 
 other projects; inactive chat polling reads a saved projection without switching
 workers. One pi worker process is active at a time. Switching is not publication.
 
-A Preview selector can inspect ready unpublished candidates within an authenticated
-project. A project without publications shows its latest ready candidate, explicitly
-labelled **UNPUBLISHED**. Publication history remains a separate timeline. Historical
-unscoped URLs retain published-only access; all project routes, candidates, downloads
-and transcripts remain password protected through the gateway.
+The workspace has an explicit working-design pointer and a bottom timeline of named,
+icon-labelled design commits. New builds never advance it. Without a design commit,
+the last legacy publication is the stable fallback; a project with neither stays
+empty rather than adopting its newest fixture. Files contains named print/test sets
+and a separate Other build outputs drawer. Representation selection and timeline
+browsing are read-only. Legacy publication events remain labelled in history.
+Historical unscoped URLs retain published-only access; project routes, candidates,
+downloads and transcripts remain password protected through the gateway.
+
+`cad_commit` requires name, Unicode icon, original workspace generation/base revision,
+and a tracked source JSON file. The extension reads clean Git HEAD; the service checks
+that the normalized committed JSON matches the immutable CAD document. This links
+existing immutable source and geometry, not a cross-filesystem atomic transaction.
+`cad_attach` registers an inspection, print or test output without moving the pointer.
+Workspace and publication generations are separate. New design commits do not publish.
+
+`design_commits`, `design_assets` and `design_state` are additive SQLite tables; original
+revision/publication rows and artifacts are not rewritten. `scripts/register-workspace.py`
+registers reviewed existing geometry with explicit roles through the private API. It
+never builds or publishes and is repeatable after partial registration. Do not classify
+old outputs by timestamp or infer roles from arbitrary titles.
+
+The commit endpoint trusts the single-owner caller's Git reference; the installed agent
+tool verifies it against its repository. The CAD container cannot independently access
+the source Git mount. Ready immutable CAD documents remain the geometry source of truth.
 
 ## Files
 
@@ -56,8 +76,14 @@ host coding-agent conversation.
 ## API and agent context
 
 - `GET /api/projects`: catalog. `POST /api/projects` with `{name}`: create.
-- `/projects/<id>/api/...`: existing state, schema, build, revision, validation,
+- `/projects/<id>/api/...`: state, schema, build, revision, validation,
   publish/restore, artifact and WebSocket contracts, scoped to that project.
+- `POST /projects/<id>/api/workspace/commits`: append named/icon-labelled design change,
+  using optimistic workspace generation and exact base revision; idempotent request key.
+- `POST /projects/<id>/api/workspace/assets`: attach a named inspection/print/test output.
+- `GET/HEAD /projects/<id>/downloads/sets/<asset>/<format>`: protected, meaningfully named
+  downloads with range support. Registered outputs remain accessible beyond the latest
+  100-build listing. No workspace mutations are exposed directly through the gateway.
 - `/projects/<id>/downloads/...`: project-bound downloads.
 - `/projects/<id>/api/agent/{state,prompt,abort,transcript}`: protected gateway routes.
 

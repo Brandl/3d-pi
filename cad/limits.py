@@ -17,7 +17,7 @@ CASTING_BOX_LIMITS = {
 def capabilities():
     return {
         "schema_version": 1,
-        "tool_contract_version": 3,
+        "tool_contract_version": 4,
         "tree_schema_version": 1,
         "units": "mm",
         "casting_box_limits_mm": {
@@ -29,7 +29,12 @@ def capabilities():
             "Wall rim Z = surface body height + top_clearance. This parameter is NOT the actual plaster cover above an extended/pedestalled master; read the built report.",
             "These are casting-box limits, not a complete list of geometric/analytical constraints. Candidate validation remains required.",
         ],
-        "workflow": ["inspect", "build candidate", "validate and render", "explicit publish"],
+        "design_commits": {
+            "tool": "cad_commit", "required_metadata": ["name", "icon", "source_file"],
+            "generation": "workspace.generation, separate from publication generation",
+            "outputs": "cad_attach links inspection/print/test artifacts without changing the working design",
+            "source": "Clean Git HEAD document must exactly match normalized immutable CAD source",
+        },
         "visual_review": {
             "views": ["iso", "top", "front", "exploded when available"],
             "styles": ["inspection", "standard"],
@@ -38,6 +43,6 @@ def capabilities():
         },
         "supported_exports": ["stl", "3mf", "step", "dxf", "zip"],
         "export_notes": "Availability is revision-specific. Analytic masters have no STEP; DXF requires named XY sections.",
-        "scope": "One legacy design; no project selection or installed versioned component instances yet.",
+        "scope": "One working design per project; explicit named/icon-labelled commits and related outputs. No installed versioned component instances.",
         "execution": "Declarative CAD only. The agent has no deployment permission; workspace source edits do not update the running service.",
     }

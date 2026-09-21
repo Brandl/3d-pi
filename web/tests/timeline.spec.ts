@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 for (const fallback of [false, true]) {
   test(`browse and scrub history without publishing (${fallback ? "image" : "WebGL"})`, async ({page, request}) => {
-    const original = await (await request.get("/api/state")).json();
+    const original = {...await (await request.get("/api/state")).json(),workspace:null};
     const publications = [...(original.publications ?? [])].sort((a,b) => a.generation-b.generation);
     test.skip(publications.length < 2, "Requires two published versions");
     const first = publications[0];
@@ -27,17 +27,15 @@ for (const fallback of [false, true]) {
     await page.goto("/");
     const viewport = page.locator("#viewport");
     await expect(viewport).toHaveAttribute("data-revision",original.revision);
-    await page.getByRole("button",{name:"Previous",exact:true}).click();
+    await page.locator('#timeline-previous').click();
     await expect(viewport).toHaveAttribute("data-revision",previous.revision);
-    await expect(page.locator("#timeline-status")).toContainText("pinned");
+    await expect(page.locator("#timeline-status")).toContainText("browsing only");
     await expect(page).toHaveURL(new RegExp(`version=${previous.generation}`));
     await page.reload();
     await expect(viewport).toHaveAttribute("data-revision",previous.revision);
-    await page.getByRole("button",{name:"Next",exact:true}).click();
+    await page.locator('#timeline-next').click();
     await expect(viewport).toHaveAttribute("data-revision",original.revision);
-    const slider = page.getByLabel("Published version",{exact:true});
-    await slider.focus();
-    await slider.press("Home");
+    await page.locator(`#history li[data-key="p:${first.generation}"] button`).click();
     await expect(viewport).toHaveAttribute("data-revision",first.revision);
     await expect(page.locator("#exports a").first()).toHaveAttribute("href",new RegExp(first.revision));
     if (fallback) {
@@ -45,13 +43,12 @@ for (const fallback of [false, true]) {
     }
     state = {...original, generation:original.generation+1, revision:previous.revision,
       publications:[{...previous,generation:original.generation+1},...original.publications]};
-    await expect(page.locator("#timeline-status")).toContainText(`latest is v${state.generation}`,{timeout:10000});
+    await expect(page.locator(`#history li[data-key="p:${state.generation}"]`)).toBeAttached({timeout:10000});
     await expect(viewport).toHaveAttribute("data-revision",first.revision);
-    await page.getByRole("button",{name:"Latest",exact:true}).click();
+    await page.locator('#timeline-latest').click();
     await expect(viewport).toHaveAttribute("data-revision",previous.revision);
     await expect(page).not.toHaveURL(/version=/);
-    await page.getByText("Choose a version",{exact:true}).click();
-    await page.locator(`#history li[data-version="${original.generation}"] button`).click();
+    await page.locator(`#history li[data-key="p:${original.generation}"] button`).click();
     await expect(viewport).toHaveAttribute("data-revision",original.revision);
     await page.goto("/?version=999999");
     await expect(page.locator("#timeline-status")).toContainText("unavailable");

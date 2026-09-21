@@ -27,7 +27,7 @@ function render(state:AgentState) {
   busy=state.busy;controls();
   element('chat-model').textContent=state.model||'No model configured';
   element('chat-status').textContent=state.error ||
-    (state.activeTools.length?`Working: ${state.activeTools.join(', ')}`:busy?'Pi is working…':state.job?.status==='interrupted'?'Previous turn interrupted. Inspect the model before retrying.':'Ready');
+    (state.activeTools.length?`Working: ${state.activeTools.join(', ')}`:busy?'Working…':['interrupted','aborted','failed'].includes(state.job?.status??'')?`Turn ${state.job?.status}. Previous changes may remain.`:'Ready');
   const projection=JSON.stringify([state.messages,state.partial]);
   if(projection===lastProjection)return;
   lastProjection=projection;
@@ -71,8 +71,8 @@ async function init() {
     pending=true;controls();
     try {
       // Record the viewed version as context, never as a request to restore it.
-      const revision=element('viewport').dataset.revision;
-      const context=revision?`\n\n[Viewer context: project ${projectId??'dripper'}, currently viewing revision ${revision}. This may be historical; inspect the live CAD state before edits. Browsing is not permission to restore.]`:'';
+      const data=element('viewport').dataset;
+      const context=`\n\n[Workspace context: project ${projectId??'dripper'}; working revision ${data.workingRevision||'none'}; workspace generation ${data.workspaceGeneration||'0'}; viewed revision ${data.revision||'none'}; selected node ${data.component||'assembly'} (${data.part||'whole model'}); visual clipping ${data.sectioned==='true'?'on (not an exact solid section)':'off'}. Selection/view are context, not permission to restore. Inspect live state before edits. Actual design commits require a short name and Unicode icon via cad_commit; attach views/print/test outputs separately.]`;
       await call('/api/agent/prompt',{text:text+context,request_key:crypto.randomUUID()});
       input.value='';busy=true;render(await call('/api/agent/state'));
     } catch(error) {element('chat-status').textContent=String(error);}
@@ -88,4 +88,8 @@ async function init() {
   });
   void poll();
 }
+const view=element('viewport');
+function contextLabel(){const data=view.dataset;const label=document.getElementById('chat-context');if(label)label.textContent=`${data.part||'Whole model'}${data.revision&&data.workingRevision&&data.revision!==data.workingRevision?' · viewing a related or historical output':''}`;}
+new MutationObserver(contextLabel).observe(view,{attributes:true,attributeFilter:['data-part','data-component','data-revision','data-working-revision']});
+window.addEventListener('cad:draft',e=>{const input=element('chat-input') as HTMLTextAreaElement;input.value=(e as CustomEvent).detail.text;input.focus();});
 void init().catch(()=>{});

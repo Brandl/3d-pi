@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+const git = async (...args: string[]) => (await promisify(execFile)('git', args, {cwd: process.cwd(), timeout: 10000, maxBuffer: 256 * 1024})).stdout.trim();
 import { Type, type Static, type TSchema } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
@@ -323,7 +326,7 @@ export default function (pi: ExtensionAPI) {
       async execute(id, params, signal) {
         const input = params as any;
         if (
-          ["cad_publish", "cad_restore"].includes(name) &&
+          ["cad_publish", "cad_restore", "cad_commit"].includes(name) &&
           !visualCheckpoints.has(input.revision)
         ) {
           const row = await request(
@@ -342,7 +345,7 @@ export default function (pi: ExtensionAPI) {
               revision: input.revision,
               status: "visual_review_required",
               published: false,
-              next: `No publication performed. Inspect the attached images and validation results, then explicitly call ${name} again with the original expected_generation. If images are missing, retry cad_render first.`,
+              next: `No design mutation performed. Inspect the attached images and validation results, then explicitly call ${name} again with the original expected_generation. If images are missing, retry cad_render first.`,
             });
             return {
               ...checkpoint,
@@ -448,7 +451,7 @@ export default function (pi: ExtensionAPI) {
               : undefined,
         };
       }
-      const id = p.revision ?? state.revision;
+      const id = p.revision ?? state.workspace?.revision ?? state.revision;
       const row = id
         ? await request(`/api/revisions/${id}`, undefined, s)
         : null;
@@ -456,6 +459,7 @@ export default function (pi: ExtensionAPI) {
         revision: row?.id ?? null,
         published_revision: state.revision,
         generation: state.generation,
+        workspace: state.workspace,
         current: row ? brief(row) : null,
         ...(p.view === "document" ? { document: row?.document } : {}),
         ...(p.view === "diagnostics" ? { diagnostics: row?.result } : {}),
@@ -536,21 +540,21 @@ export default function (pi: ExtensionAPI) {
   );
   tool(
     "cad_parameters",
-    "Change existing design-global parameters on the published document and build a candidate. Inspect consumers with cad_component_inspect and limits with cad_capabilities first. Never publishes.",
+    "Change existing design-global parameters on the working document and build a candidate. Inspect consumers with cad_component_inspect and limits with cad_capabilities first. Never publishes.",
     Type.Object({
       changes_json: Type.String({ maxLength: 16000 }),
+      expected_workspace_generation: Type.Optional(Type.Integer({minimum:0})),
       expected_generation: generation,
       request_key: requestKey,
       wait: Type.Optional(Type.Boolean()),
     }),
     async (p, s, id) => {
       const state = await request("/api/state", undefined, s);
-      if (state.generation !== p.expected_generation || !state.revision)
-        throw new Error(
-          "No published model or stale generation; inspect first.",
-        );
+      const working = state.workspace?.revision ?? state.revision;
+      if (state.generation !== p.expected_generation || !working || (state.workspace?.revision && p.expected_workspace_generation !== state.workspace.generation))
+        throw new Error('No working model or stale workspace/publication generation; inspect first.');
       const row = await request(
-        `/api/revisions/${state.revision}`,
+        `/api/revisions/${working}`,
         undefined,
         s,
       );
@@ -585,6 +589,24 @@ export default function (pi: ExtensionAPI) {
         p.wait ?? true,
       );
     },
+  );
+  tool(
+    'cad_commit',
+    'Commit an actual design change to the working model and bottom timeline. REQUIRED: a short name and Unicode emoji/icon for every commit. Builds, views, renders, exports and fixtures are NOT commits. First commit the source JSON to project Git. This tool reads clean Git HEAD and verifies the committed document against the immutable CAD result. expected_generation is WORKSPACE generation (not publication generation); base_revision is the working revision or null for a new project. Does not publish. Use cad_attach for derived outputs. Do not adopt historical geometry merely because it is being viewed.',
+    Type.Object({revision, name: Type.String({minLength:1,maxLength:80}), icon: Type.String({minLength:1,maxLength:16}), source_file: Type.String({minLength:1,maxLength:240}), base_revision: Type.Union([revision,Type.Null()]), expected_generation: Type.Integer({minimum:0}), request_key: requestKey}),
+    async (p,s,id) => {
+      if(p.source_file.startsWith('/') || p.source_file.split('/').some(x=>!x || x==='.' || x==='..') || !/^[A-Za-z0-9_. /-]+$/.test(p.source_file)) throw new Error('Use a relative tracked source JSON path');
+      if(await git('status','--porcelain','--untracked-files=no')) throw new Error('Commit tracked source changes to project Git before cad_commit');
+      const source_commit=await git('rev-parse','HEAD');
+      const source_document=JSON.parse(await git('show',`${source_commit}:${p.source_file}`));
+      return request('/api/workspace/commits',{...p,source_commit,source_document,request_key:p.request_key??createHash('sha256').update(id).digest('hex')},s);
+    },
+  );
+  tool(
+    'cad_attach',
+    'Attach an immutable inspection, print set, or test fixture to an existing design commit. Does not change the working model or create a timeline entry. Name the output clearly; put concise assembly/printing/test instructions, omitted parts, orientations and limitations in note (downloadable with the files). Manufacturing outputs must include complete free-state parts, not inspection-only omissions.',
+    Type.Object({commit:revision,revision,role:StringEnum(['inspection','print','test']),name:Type.String({minLength:1,maxLength:80}),note:Type.Optional(Type.String({maxLength:16000})),request_key:requestKey}),
+    async(p,s,id)=>request('/api/workspace/assets',{...p,request_key:p.request_key??createHash('sha256').update(id).digest('hex')},s),
   );
   tool(
     "cad_cancel",

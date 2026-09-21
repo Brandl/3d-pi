@@ -27,6 +27,8 @@ for (const fallback of [false, true]) {
       await expect(image).toHaveAttribute("src", /render-exploded\.png$/);
       await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     }
+    await page.locator('#open-files').click();
+    await page.locator('#files-drawer > details').filter({hasText:'Export viewed geometry'}).locator('summary').click();
     const fileType = page.getByLabel("File type", {exact:true});
     const exportKeys = Object.keys(row.result.exports);
     const formats = [...new Set(exportKeys.map(key => key.split(":")[0]))].sort();
@@ -54,6 +56,7 @@ for (const fallback of [false, true]) {
     const chunks: Buffer[] = [];
     for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
     expect(Buffer.concat(chunks).equals(await response.body())).toBe(true);
+    await page.keyboard.press('Escape');
     await page.getByRole("button", {name:"Assemble",exact:true}).click();
     expect((await (await request.get("/api/state")).json()).generation).toBe(state.generation);
     expect(errors).toEqual([]);
