@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-const git = async (...args: string[]) => (await promisify(execFile)('git', args, {cwd: process.cwd(), timeout: 10000, maxBuffer: 256 * 1024})).stdout.trim();
+const git = async (cwd: string, ...args: string[]) => (await promisify(execFile)('git', args, {cwd, timeout: 10000, maxBuffer: 256 * 1024})).stdout.trim();
 import { Type, type Static, type TSchema } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
@@ -314,6 +314,7 @@ export default function (pi: ExtensionAPI) {
       p: Static<T>,
       s: AbortSignal | undefined,
       id: string,
+      cwd: string,
     ) => Promise<unknown>,
   ) {
     pi.registerTool({
@@ -323,7 +324,7 @@ export default function (pi: ExtensionAPI) {
         description +
         " Primary text is bounded JSON; use focused selectors if truncated. Ready builds and first summary inspections attach a multi-view visual checkpoint when available.",
       parameters,
-      async execute(id, params, signal) {
+      async execute(id, params, signal, _update, ctx) {
         const input = params as any;
         if (
           ["cad_publish", "cad_restore", "cad_commit"].includes(name) &&
@@ -354,7 +355,7 @@ export default function (pi: ExtensionAPI) {
             };
           }
         }
-        const data: any = await execute(params, signal, id);
+        const data: any = await execute(params, signal, id, ctx.cwd ?? process.cwd());
         const output = text(data);
         const candidate = ["cad_build", "cad_parameters"].includes(name)
           ? data
@@ -594,11 +595,11 @@ export default function (pi: ExtensionAPI) {
     'cad_commit',
     'Commit an actual design change to the working model and bottom timeline. REQUIRED: a short name and Unicode emoji/icon for every commit. Builds, views, renders, exports and fixtures are NOT commits. First commit the source JSON to project Git. This tool reads clean Git HEAD and verifies the committed document against the immutable CAD result. expected_generation is WORKSPACE generation (not publication generation); base_revision is the working revision or null for a new project. Does not publish. Use cad_attach for derived outputs. Do not adopt historical geometry merely because it is being viewed.',
     Type.Object({revision, name: Type.String({minLength:1,maxLength:80}), icon: Type.String({minLength:1,maxLength:16}), source_file: Type.String({minLength:1,maxLength:240}), base_revision: Type.Union([revision,Type.Null()]), expected_generation: Type.Integer({minimum:0}), request_key: requestKey}),
-    async (p,s,id) => {
+    async (p,s,id,cwd) => {
       if(p.source_file.startsWith('/') || p.source_file.split('/').some(x=>!x || x==='.' || x==='..') || !/^[A-Za-z0-9_. /-]+$/.test(p.source_file)) throw new Error('Use a relative tracked source JSON path');
-      if(await git('status','--porcelain','--untracked-files=no')) throw new Error('Commit tracked source changes to project Git before cad_commit');
-      const source_commit=await git('rev-parse','HEAD');
-      const source_document=JSON.parse(await git('show',`${source_commit}:${p.source_file}`));
+      if(await git(cwd,'status','--porcelain','--untracked-files=no')) throw new Error('Commit tracked source changes to project Git before cad_commit');
+      const source_commit=await git(cwd,'rev-parse','HEAD');
+      const source_document=JSON.parse(await git(cwd,'show',`${source_commit}:${p.source_file}`));
       return request('/api/workspace/commits',{...p,source_commit,source_document,request_key:p.request_key??createHash('sha256').update(id).digest('hex')},s);
     },
   );

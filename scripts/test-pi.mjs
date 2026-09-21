@@ -36,10 +36,11 @@ const loaded = await loadExtensions(
 assert.deepEqual(loaded.errors, []);
 const tools = loaded.extensions[0].tools;
 assert.equal(tools.size, 17);
+let toolCwd=process.cwd();
 async function raw(name, params) {
   return tools
     .get(name)
-    .definition.execute(randomUUID(), params, undefined, undefined, {});
+    .definition.execute(randomUUID(), params, undefined, undefined, {cwd:toolCwd});
 }
 async function call(name, params = {}) {
   return JSON.parse((await raw(name, params)).content[0].text);
@@ -265,6 +266,8 @@ try {
   execFileSync('git',['init','-q']);
   execFileSync('git',['config','user.email','test@example.invalid']);execFileSync('git',['config','user.name','Test']);
   writeFileSync('document.json',JSON.stringify(doc));execFileSync('git',['add','document.json']);execFileSync('git',['commit','-qm','Source snapshot']);
+  toolCwd=gitRepo;
+  process.chdir(originalCwd); // SDK session cwd must work independently of process cwd.
   const before=await call('cad_inspect');
   const input={revision:candidate.revision,base_revision:before.revision,expected_generation:before.workspace.generation,name:'Create enclosure',icon:'📦',source_file:'document.json',request_key:randomUUID()};
   const committed=await call('cad_commit',input);
@@ -273,9 +276,9 @@ try {
   const asset=await call('cad_attach',{commit:committed.id,revision:changed.revision,role:'test',name:'Test variant',request_key:randomUUID()});
   assert.equal(asset.role,'test');
   const after=await call('cad_inspect');assert.equal(after.workspace.revision,candidate.revision);assert.equal(after.generation,before.generation);assert.equal(after.workspace.commits.length,1);
-  writeFileSync('document.json',JSON.stringify({...doc,name:'Dirty source'}));
+  writeFileSync(join(gitRepo,'document.json'),JSON.stringify({...doc,name:'Dirty source'}));
   await assert.rejects(()=>call('cad_commit',{...input,request_key:randomUUID()}),/Commit tracked source/);
-} finally {process.chdir(originalCwd);rmSync(gitRepo,{recursive:true,force:true});}
+} finally {toolCwd=originalCwd;process.chdir(originalCwd);rmSync(gitRepo,{recursive:true,force:true});}
 console.log(
   "Pi integration passed: 17 tools loaded; design commits with Git/source verification, named emoji metadata, output attachments and dirty-source rejection; capabilities, tree, component inspection, idempotent build, measure, validate, render, publish, parameter edit, export discovery/four exports, history, cancel, restore; automatic image checkpoints, compaction reset, pre-publication review, legacy fallback and missing-image handling.",
 );

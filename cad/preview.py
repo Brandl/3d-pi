@@ -328,3 +328,4 @@ def index():
 
 
 app.mount("/assets", StaticFiles(directory=DIST / "assets", check_dir=False), name="assets")
+app.mount("/fonts", StaticFiles(directory=DIST / "fonts", check_dir=False), name="fonts")

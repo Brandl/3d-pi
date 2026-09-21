@@ -45,7 +45,9 @@ function render(state:AgentState) {
     const title=document.createElement(message.role==='toolResult'?'summary':'strong');
     title.textContent=message.role==='user'?'You':message.role==='toolResult'?`${message.tool || 'Tool'}${message.error?' · error':''}`:'Pi';
     const text=document.createElement('div');
-    text.className='chat-text';if(message.role==='toolResult')text.textContent=message.text;else formatChatText(text,message.text);
+    const contextAt=message.role==='user'?Math.max(message.text.lastIndexOf('\n\n[Workspace context:'),message.text.lastIndexOf('\n\n[Viewer context:')):-1;
+    text.className='chat-text';if(message.role==='toolResult')text.textContent=message.text;else formatChatText(text,contextAt<0?message.text:message.text.slice(0,contextAt));
+    if(contextAt>=0){const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Model context';const context=document.createElement('small');context.textContent=message.text.slice(contextAt).trim();details.append(summary,context);text.append(details);}
     item.append(title,text);
     if(message.tools?.length){const tools=document.createElement('small');tools.textContent=`Tools: ${message.tools.join(', ')}`;item.append(tools);}
     if(message.role==='toolResult'){
