@@ -36,6 +36,18 @@ def construct(doc: Document):
                         length(feature.height),
                         align=(b.Align.CENTER, b.Align.CENTER, b.Align.MIN),
                     )
+                case "sphere":
+                    shape = b.Sphere(length(feature.radius), align=(b.Align.CENTER,) * 3)
+                case "cone":
+                    bottom, top, height = (val(x) for x in feature.size)
+                    if not (0 <= bottom <= 2000 and 0 <= top <= 2000 and max(bottom, top) >= 0.01):
+                        raise ValueError("Cone radii must be 0..2000 mm, with at least one >=0.01")
+                    shape = b.Cone(
+                        bottom,
+                        top,
+                        length(height),
+                        align=(b.Align.CENTER, b.Align.CENTER, b.Align.MIN),
+                    )
                 case "extrude":
                     points = [(val(x), val(y)) for x, y in feature.points]
                     if any(abs(v) > 2000 for point in points for v in point):

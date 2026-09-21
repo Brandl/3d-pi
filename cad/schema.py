@@ -37,6 +37,8 @@ class Feature(Strict):
     op: Literal[
         "box",
         "cylinder",
+        "sphere",
+        "cone",
         "extrude",
         "union",
         "subtract",
@@ -46,7 +48,10 @@ class Feature(Strict):
         "gentle_twist",
     ]
     surface: GentleTwist | None = None
-    size: tuple[Scalar, Scalar, Scalar] | None = None
+    size: tuple[Scalar, Scalar, Scalar] | None = Field(
+        default=None,
+        description="Box: X/Y/Z lengths. Cone: bottom radius, top radius, height; Z starts at zero.",
+    )
     radius: Scalar | None = None
     height: Scalar | None = None
     points: Annotated[list[tuple[Scalar, Scalar]], Field(min_length=3, max_length=100)] | None = (
@@ -62,6 +67,8 @@ class Feature(Strict):
         required = {
             "box": ["size"],
             "cylinder": ["radius", "height"],
+            "sphere": ["radius"],
+            "cone": ["size"],
             "extrude": ["points", "height"],
             "fillet": ["radius"],
             "gentle_twist": ["surface"],

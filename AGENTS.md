@@ -25,7 +25,7 @@ If a build fails, inspect its diagnostics. Never silently change a user's reques
 ## Document conventions
 
 - Millimeters, right-handed coordinates, Z up. Parameter scalars are not unit-typed; use explicit descriptive names and mm for lengths.
-- Box starts at (0,0,0); cylinder is centered in XY with its bottom at z=0. Extrude uses a closed polygon in XY, extruded along +Z.
+- Box starts at (0,0,0); cylinder is centered in XY with its bottom at z=0. `sphere` uses `radius` and is centered at the origin. `cone` uses `size:[bottom_radius,top_radius,height]`, centered in XY with bottom at z=0; one radius may be zero. Cones can construct exact sloped/chamfer cutters and spheres exact thumb recesses. Extrude uses a closed polygon in XY, extruded along +Z.
 - Feature inputs refer to earlier feature names. Each output names one part and a feature.
 - Each feature's rotation (Euler X/Y/Z in degrees) and then translation apply to the result of the operation, not to its inputs independently.
 - Expressions allow numeric constants, parameter names, parentheses, +, -, *, /. No code, functions, powers, imports, or file access. Parameter dependencies may refer forward but cannot cycle.
