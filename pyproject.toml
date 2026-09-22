@@ -11,6 +11,7 @@ dependencies = [
   "matplotlib==3.11.2",
   "pymeshlab==2025.7.post1",
   "trimesh==4.6.8",
+  "python-multipart==0.0.22",
 ]
 
 [dependency-groups]

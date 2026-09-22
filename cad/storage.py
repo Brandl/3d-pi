@@ -40,6 +40,9 @@ class Store:
             from cad.workspace import DDL
 
             db.executescript(DDL)
+            from cad.uploads import DDL as UPLOAD_DDL
+
+            db.executescript(UPLOAD_DDL)
 
     @contextmanager
     def connection(self):

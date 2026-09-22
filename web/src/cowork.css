@@ -16,3 +16,5 @@ main,.agent-enabled main{height:calc(100dvh - 58px);display:grid;grid-template-c
 #timeline-actions{grid-column:3;grid-row:2;display:flex;flex-direction:column;justify-content:center;gap:5px}#timeline-actions button{font-size:10px;padding:6px 8px}
 
 #component-library button{background:#263c48;color:#e0ede8;border-color:#496474}#component-library button:hover{background:#34505a}#section-view[aria-pressed=true]{background:#dcebd4;border-color:#8dab7e}
+
+#project-uploads{border-bottom:1px solid #cbd5c7;padding-bottom:1rem;margin-bottom:1rem}#project-uploads form,#project-uploads label,.upload-card{display:grid;gap:.5rem}#project-uploads input,#project-uploads textarea{box-sizing:border-box;width:100%;min-width:0}#project-uploads textarea{resize:vertical}#project-uploads button{min-height:44px}.upload-card{padding:.8rem 0;border-top:1px solid #cbd5c7;overflow-wrap:anywhere}.upload-note{white-space:pre-wrap}.upload-card small{display:block}

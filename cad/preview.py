@@ -275,6 +275,54 @@ def agent_request(operation, body=None):
         raise HTTPException(503, "Web agent is unavailable") from exc
 
 
+def upload_request(path, method, body=None, headers=None):
+    req = urllib.request.Request(ORIGIN + prefix() + path, data=body,
+                                 method=method, headers=headers or {})
+    try:
+        response = urllib.request.urlopen(req, timeout=60)
+    except urllib.error.HTTPError as exc:
+        response = exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise HTTPException(503, "Project files unavailable") from exc
+    with response:
+        data = response.read() if method != "HEAD" else b""
+        forwarded = {name: response.headers[name] for name in (
+            "Content-Type", "Content-Length", "Content-Disposition", "Content-Range",
+            "Accept-Ranges", "ETag", "Last-Modified"
+        ) if response.headers.get(name) is not None}
+        forwarded.update({"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+        return Response(data, status_code=response.code, headers=forwarded)
+
+
+@app.api_route("/api/uploads", methods=["GET", "POST"])
+@app.api_route("/api/uploads/{ident}", methods=["PATCH", "DELETE"])
+@app.api_route("/downloads/uploads/{ident}/file", methods=["GET", "HEAD"])
+async def project_uploads(request: Request, ident: str | None = None):
+    from cad.uploads import MAX_BODY
+
+    if not project_id.get() or (ident is not None and not re.fullmatch(r"[a-f0-9]{32}", ident)):
+        raise HTTPException(404)
+    path = "/api/uploads" + (f"/{ident}" if ident else "")
+    if request.method in ("GET", "HEAD") and ident:
+        path = f"/downloads/uploads/{ident}/file"
+    body = None
+    headers = {k: request.headers[k] for k in ("content-type", "range", "if-range")
+               if k in request.headers}
+    if request.method in ("POST", "PATCH"):
+        data = bytearray()
+        limit = MAX_BODY if request.method == "POST" else 32768
+        try:
+            async with asyncio.timeout(60):
+                async for chunk in request.stream():
+                    if len(data) + len(chunk) > limit:
+                        raise HTTPException(413, "Upload request too large")
+                    data.extend(chunk)
+        except TimeoutError as exc:
+            raise HTTPException(408, "Upload timed out") from exc
+        body = bytes(data)
+    return await asyncio.to_thread(upload_request, path, request.method, body, headers)
+
+
 @app.api_route("/api/projects", methods=["GET", "POST"])
 async def project_catalog(request: Request):
     body = None
