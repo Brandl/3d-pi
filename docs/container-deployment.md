@@ -8,7 +8,7 @@ Three non-root containers share a rootless Podman pod's network:
 
 - `3d-pi-cad`: private modeling API / bounded geometry worker, persistent `/data`. No provider credentials.
 - `3d-pi-agent`: pi SDK 0.85.1, CAD extension and command/file tools. Persistent `/workspace` Git checkout and `/agent-state` sessions/request journal. Internal bearer-authenticated bridge on loopback port 8768; not host-published.
-- `3d-pi-web`: viewer, login and allowlisted agent proxy. Only password hash and internal bridge token mounted; no provider credentials or direct data mount.
+- `3d-pi-web`: viewer, login and allowlisted agent proxy. Password hash, internal bridge token and a private website-session store mounted; no provider credentials or CAD data mount.
 
 Host API and gateway ports bind **127.0.0.1 only**. Tunnel only the gateway through HTTPS. Do not publish the API or agent bridge. Containers have read-only root filesystems, writable temporary storage, dropped capabilities, no-new-privileges, PID/CPU/memory limits and no host/Podman socket. This is not a multi-tenant security sandbox; writable persistent volumes have no disk quota.
 
@@ -31,6 +31,7 @@ Default persistent root: `~/.local/share/3d-pi`:
 - `workspace/` (source Git, not a hot-reloaded application installation)
 - `agent/sessions/`, `agent/requests.json`, `agent/pi/`, `agent/models-store.json`
 - `secrets/password.json` (scrypt hash), `secrets/agent-token` (internal random bearer token)
+- `web-auth/sessions.sqlite3` (private website login sessions, not CAD data)
 
 Keep the root private and secrets mode 0600. No plaintext website password needs to be retained. `cad.auth --generate` prints a generated password once; store it in your password manager. Never commit secrets or sessions.
 
@@ -75,7 +76,7 @@ podman healthcheck run 3d-pi-agent
 
 Restart policies cover container failures; automatic host-boot startup/Quadlet and a stable tunnel/domain are separate follow-up work. Do not claim reboot persistence of the running service merely because its files persist.
 
-Website sessions expire after eight hours; logout invalidates the session. A gateway restart invalidates all website sessions. Password login is throttled and password hashes are checked serially; authenticated mutations require Origin + CSRF validation. All protected responses are no-store. A stopped/restarted agent preserves conversation and request IDs; an interrupted request is marked interrupted and is never automatically replayed. Only one turn is accepted at a time; repeated request IDs are deduplicated. Stop aborts the turn. A 15-minute turn limit also requests abort. Aborting does **not** roll back already executed CAD publications or file changes; inspect current state before retrying.
+Website logins last 365 days of inactivity. Successful authenticated HTTP requests renew the lifetime at most once daily and refresh the Secure/HttpOnly/SameSite=Strict cookie. Logout immediately revokes that session. With `CAD_SESSION_DB=/auth-state/sessions.sqlite3` and the private writable `web-auth:/auth-state` mount (configured by `run-podman.sh`), logins survive gateway/container restarts and image replacements. The database is mode 0600 in a mode 0700 directory; only SHA-256 bearer-token hashes are stored, with CSRF secrets, timestamps and a credential fingerprint. At most 128 sessions are retained; oldest sessions are evicted at the limit. Without `CAD_SESSION_DB`, development/test sessions remain memory-only. Changing the password configuration and restarting the gateway revokes all stored sessions. To revoke every device without changing the password, stop the gateway, remove its private session database (including journal sidecars if present), and restart it. Treat this store as sensitive runtime data; never commit it or bake it into images. Users of shared devices should sign out. Clearing cookies, private browsing, or changing the temporary tunnel hostname still requires login; a stable hostname is needed to avoid the last case. Upgrading from the old memory-only gateway requires one new login. Password login is throttled and password hashes are checked serially; authenticated mutations require Origin + CSRF validation. All protected responses are no-store. A stopped/restarted agent preserves conversation and request IDs; an interrupted request is marked interrupted and is never automatically replayed. Only one turn is accepted at a time; repeated request IDs are deduplicated. Stop aborts the turn. A 15-minute turn limit also requests abort. Aborting does **not** roll back already executed CAD publications or file changes; inspect current state before retrying.
 
 To change the website password, run `cad.auth` on the existing hash path and restart the web container. Keep that hash path's permissions private. Do not change it while expecting old sessions to remain valid.
 

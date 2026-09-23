@@ -13,10 +13,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+
+from cad.sessions import SessionStore
 
 COOKIE = "__Host-cad_session"
-TTL = 8 * 3600
+TTL = 365 * 24 * 3600
+RENEW_INTERVAL = 24 * 3600
 
 
 def password_hash(password, salt=None):
@@ -28,8 +31,10 @@ def password_hash(password, salt=None):
 
 
 class PasswordGate:
-    def __init__(self, record=None):
+    def __init__(self, record=None, session_path=None):
         self.record = record
+        credential = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
+        self.store = SessionStore(session_path, credential) if session_path else None
         self.sessions = {}
         self.attempts = deque()
         self.verify_lock = asyncio.Lock()
@@ -37,13 +42,18 @@ class PasswordGate:
     @classmethod
     def from_env(cls):
         path = os.environ.get("CAD_PASSWORD_HASH_FILE")
-        return cls(json.loads(Path(path).read_text()) if path else None)
+        return cls(
+            json.loads(Path(path).read_text()) if path else None,
+            session_path=os.environ.get("CAD_SESSION_DB"),
+        )
 
     def session(self, scope):
         request = Request({**scope, "type": "http"})
         token = request.cookies.get(COOKIE, "")
+        if len(token) != 43:
+            return None
         key = hashlib.sha256(token.encode()).hexdigest()
-        session = self.sessions.get(key)
+        session = self.store.get(key, time.time()) if self.store else self.sessions.get(key)
         if session and session["expires"] > time.time():
             return session
         self.sessions.pop(key, None)
@@ -55,9 +65,32 @@ class PasswordGate:
         if len(self.sessions) >= 128:
             self.sessions.pop(next(iter(self.sessions)))
         token = secrets.token_urlsafe(32)
-        session = {"csrf": secrets.token_urlsafe(32), "expires": now + TTL}
-        self.sessions[hashlib.sha256(token.encode()).hexdigest()] = session
+        session = {"csrf": secrets.token_urlsafe(32), "expires": now + TTL, "renewed": now}
+        key = hashlib.sha256(token.encode()).hexdigest()
+        if self.store:
+            self.store.put(key, session, now)
+        else:
+            self.sessions[key] = session
         return token, session
+
+    def renew(self, scope, session):
+        now = time.time()
+        if not session or now - session["renewed"] < RENEW_INTERVAL:
+            return False
+        token = Request({**scope, "type": "http"}).cookies.get(COOKIE, "")
+        key = hashlib.sha256(token.encode()).hexdigest()
+        if self.store and not self.store.renew(key, now, TTL, RENEW_INTERVAL):
+            return False
+        if session["expires"] <= now:
+            return False
+        session.update(expires=now + TTL, renewed=now)
+        return True
+
+    def revoke(self, token):
+        key = hashlib.sha256(token.encode()).hexdigest()
+        if self.store:
+            self.store.revoke(key)
+        self.sessions.pop(key, None)
 
 
 def same_origin(request):
@@ -96,8 +129,30 @@ class PasswordMiddleware:
                 return await send({"type": "websocket.close", "code": 4401})
             return await self.app(scope, receive, send)
 
+        renew_cookie = False
+
         async def secured_send(message):
             if message["type"] == "http.response.start":
+                if (
+                    session
+                    and gate.record is not None
+                    and scope["path"] not in ("/auth/login", "/auth/logout")
+                    and message["status"] < 400
+                    and (renew_cookie or gate.renew(scope, session))
+                ):
+                    cookie = Response()
+                    cookie.set_cookie(
+                        COOKIE,
+                        request.cookies[COOKIE],
+                        max_age=TTL,
+                        httponly=True,
+                        secure=True,
+                        samesite="strict",
+                        path="/",
+                    )
+                    message["headers"] = list(message.get("headers", [])) + [
+                        (key, value) for key, value in cookie.raw_headers if key == b"set-cookie"
+                    ]
                 security = [
                     (b"cache-control", b"no-store"),
                     (b"x-content-type-options", b"nosniff"),
@@ -197,12 +252,13 @@ class PasswordMiddleware:
             ):
                 return await reply(JSONResponse({"detail": "CSRF check failed"}, 403))
         if path == "/auth/session" and request.method == "GET":
+            renew_cookie = gate.renew(scope, session)
             return await reply(
                 JSONResponse({"csrf": session["csrf"], "expires": session["expires"]})
             )
         if path == "/auth/logout" and request.method == "POST":
             token = request.cookies.get(COOKIE, "")
-            gate.sessions.pop(hashlib.sha256(token.encode()).hexdigest(), None)
+            gate.revoke(token)
             response = JSONResponse({"ok": True})
             response.delete_cookie(COOKIE, path="/", secure=True, httponly=True, samesite="strict")
             return await reply(response)

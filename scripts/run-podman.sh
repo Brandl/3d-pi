@@ -8,8 +8,8 @@ for file in "$runtime/secrets/password.json" "$runtime/secrets/agent-token" "$ru
   test -f "$file" || { echo "Missing $file; run prepare-runtime.py and configure a password first." >&2; exit 1; }
 done
 if podman pod exists "$pod"; then echo "Pod $pod already exists. Stop/remove that pod explicitly before redeploying; persistent data is separate." >&2; exit 1; fi
-mkdir -p "$runtime/projects"
-chmod 700 "$runtime/projects"
+mkdir -p "$runtime/projects" "$runtime/web-auth"
+chmod 700 "$runtime/projects" "$runtime/web-auth"
 podman pod create --name "$pod" --userns=keep-id -p "127.0.0.1:$api_port:8765" -p "127.0.0.1:$web_port:8767"
 common=(--pod "$pod" --read-only --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=256 --tmpfs /tmp:rw,nosuid,nodev,size=256m --restart=unless-stopped)
 podman run -d "${common[@]}" --name "$pod-cad" --memory=8g --memory-swap=8g --cpus=2 \
@@ -30,6 +30,7 @@ podman run -d "${common[@]}" --name "$pod-agent" --memory=2g --memory-swap=2g --
   --health-cmd "node /opt/agent/health.mjs" --health-interval=30s --health-start-period=30s \
   "${seed[@]}" localhost/3d-pi-agent:workspace
 podman run -d "${common[@]}" --name "$pod-web" --memory=1g --memory-swap=1g --cpus=1 \
+  -v "$runtime/web-auth:/auth-state:rw" -e CAD_SESSION_DB=/auth-state/sessions.sqlite3 \
   -v "$runtime/secrets/password.json:/run/secrets/password.json:ro" \
   -v "$runtime/secrets/agent-token:/run/secrets/agent-token:ro" \
   -e CAD_PASSWORD_HASH_FILE=/run/secrets/password.json -e CAD_AGENT_TOKEN_FILE=/run/secrets/agent-token \
