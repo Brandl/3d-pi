@@ -1,5 +1,21 @@
 import {test,expect} from '@playwright/test';
 
+test('selected thumbnail is revealed without snapping manual scrolling on every poll',async({page,request})=>{
+ const state=await (await request.get('/api/state')).json();
+ const revision=state.workspace?.revision??state.revision;
+ test.skip(!revision,'Requires a model fixture');
+ const commits=Array.from({length:24},(_,i)=>({id:(i+1).toString(16).padStart(32,'0'),generation:i+1,revision,name:`Change ${i+1}`,icon:'✦',created:1,source_commit:'a'.repeat(40),source_file:'document.json'}));
+ await page.route('**/api/state',r=>r.fulfill({json:{...state,workspace:{revision,generation:24,commit_id:commits.at(-1)!.id,commits,assets:[]}}}));
+ await page.goto('/');
+ const strip=page.locator('#history');
+ await expect.poll(()=>strip.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+ const active=await page.locator('#history .current').boundingBox(),bounds=await strip.boundingBox();
+ expect(active!.x).toBeGreaterThanOrEqual(bounds!.x-1);expect(active!.x+active!.width).toBeLessThanOrEqual(bounds!.x+bounds!.width+1);
+ await strip.evaluate(el=>{el.scrollLeft=0;});
+ await page.waitForTimeout(4500);
+ expect(await strip.evaluate(el=>el.scrollLeft)).toBe(0);
+});
+
 for(const width of [1024,1440]) test(`studio conversation left, thumbnail history and compact exchanges at ${width}px`,async({page,request})=>{
  await page.setViewportSize({width,height:960});
  let extra=false;

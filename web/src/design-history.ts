@@ -6,7 +6,7 @@ type Entry={key:string;revision:string;name:string;icon:string;detail:string;com
 type State={revision:string|null;generation:number;candidates?:string[];candidate_names?:Record<string,string>;publications?:{generation:number;revision:string;name?:string|null;operation:string}[];workspace?:Workspace|null};
 const $=(id:string)=>document.getElementById(id)!;
 export function createHistory(changed:()=>void){
- let entries:Entry[]=[],index=-1,key='',assetsKey='',assetEpoch=0;
+ let entries:Entry[]=[],index=-1,key='',assetsKey='',assetEpoch=0,visibleKey='';
  let params=new URL(location.href).searchParams;
  let commit=params.get('commit'),version=params.get('version'),candidate=params.get('candidate');
  const restore=document.createElement('button');restore.id='timeline-restore';restore.textContent='Ask π to restore';restore.hidden=true;$('timeline-working').before(restore);
@@ -49,8 +49,10 @@ export function createHistory(changed:()=>void){
   const related=workspace?.assets.filter(a=>a.commit_id===owner)??[];
   index=selected?entries.indexOf(selected):entries.map(e=>e.revision).lastIndexOf(working??'');
   const listKey=JSON.stringify(entries);
-  if(key!==listKey){key=listKey;$('history').replaceChildren();for(const entry of entries){const li=document.createElement('li');li.dataset.key=entry.key;const button=document.createElement('button');button.type='button';button.title=entry.detail;button.setAttribute('aria-label',entry.name);const icon=document.createElement('span');icon.className='commit-icon';icon.textContent=entry.icon;const label=document.createElement('span');label.className='commit-label';label.textContent=entry.name;const thumb=document.createElement('img');thumb.className='revision-thumb';thumb.alt='';thumb.loading='lazy';thumb.decoding='async';thumb.src=projectPath(`/api/revisions/${entry.revision}/artifacts/review-iso.png`);let fallback=false;thumb.onerror=()=>{if(!fallback){fallback=true;thumb.src=projectPath(`/api/revisions/${entry.revision}/artifacts/render-iso.png`);}else{thumb.hidden=true;button.classList.add('thumb-unavailable');}};button.append(thumb,icon,label);button.onclick=()=>choose(entry);li.append(button);$('history').append(li);}}
+  if(key!==listKey){key=listKey;$('history').replaceChildren();for(const entry of entries){const li=document.createElement('li');li.dataset.key=entry.key;const button=document.createElement('button');button.type='button';button.title=entry.detail;button.setAttribute('aria-label',entry.name);const icon=document.createElement('span');icon.className='commit-icon';icon.textContent=entry.icon;const label=document.createElement('span');label.className='commit-label';label.textContent=entry.name;const thumb=document.createElement('img');thumb.className='revision-thumb';thumb.alt='';thumb.loading='lazy';thumb.decoding='async';thumb.fetchPriority='low';thumb.src=projectPath(`/api/revisions/${entry.revision}/artifacts/review-iso.png`);let fallback=false;thumb.onerror=()=>{if(!fallback){fallback=true;thumb.src=projectPath(`/api/revisions/${entry.revision}/artifacts/render-iso.png`);}else{thumb.hidden=true;button.classList.add('thumb-unavailable');}};button.append(thumb,icon,label);button.onclick=()=>choose(entry);li.append(button);$('history').append(li);}}
   Array.from($('history').children).forEach((li,i)=>{li.classList.toggle('current',i===index);li.querySelector('button')!.setAttribute('aria-pressed',String(i===index));});
+  const activeKey=entries[index]?.key??'';
+  if(activeKey!==visibleKey){visibleKey=activeKey;requestAnimationFrame(()=>$('history').querySelector('.current')?.scrollIntoView({block:'nearest',inline:'nearest'}));}
   const pos=$('timeline-position') as HTMLInputElement;pos.max=String(Math.max(0,entries.length-1));pos.value=String(Math.max(0,index));pos.disabled=entries.length<2;
   ($('timeline-previous') as HTMLButtonElement).disabled=index<=0;($('timeline-next') as HTMLButtonElement).disabled=index<0||index>=entries.length-1;
   ($('timeline-latest') as HTMLButtonElement).disabled=!candidate&&!commit&&!version;
