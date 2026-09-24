@@ -47,7 +47,7 @@ function render(state:AgentState) {
   const lastUser=messages.map(m=>m.role).lastIndexOf('user');
   let target:HTMLElement=log;
   let activity:HTMLDetailsElement|null=null;
-  let toolCount=0;
+  let toolCount=0,errorCount=0;
   let turnKey='initial';
   const occurrences=new Map<string,number>();
   for(const [index,message] of messages.entries()) {
@@ -59,7 +59,7 @@ function render(state:AgentState) {
         const turn=messages.slice(index,next<0?messages.length:next);
         const lastAnswer=[...turn].reverse().find(m=>m.role==='assistant'&&m.text&&!m.tools?.length);
         const errors=turn.some(m=>m.error);
-        const card=document.createElement('details');card.className='chat-turn';card.dataset.chatKey=turnKey;card.open=expanded.get(turnKey)??errors;
+        const card=document.createElement('details');card.className='chat-turn';card.dataset.chatKey=turnKey;card.open=expanded.get(turnKey)??false;
         const summary=document.createElement('summary');const label=document.createElement('strong');label.textContent=errors?'Earlier request · tool error':'Earlier request';
         const prompt=document.createElement('span');const request=visibleText(message);prompt.textContent=request.slice(0,130)+(request.length>130?'…':'');
         summary.append(label,prompt);
@@ -81,13 +81,14 @@ function render(state:AgentState) {
     item.append(title,text);
     if(message.tools?.length){const tools=document.createElement('small');tools.textContent=`Tools: ${message.tools.join(', ')}`;item.append(tools);}
     if(activityMessage){
-      if(!activity){activity=document.createElement('details');activity.className='chat-activity';activity.dataset.chatKey=`${turnKey}:activity:${messageKey(message.text)}`;activity.open=expanded.get(activity.dataset.chatKey)??false;activity.append(document.createElement('summary'));target.append(activity);toolCount=0;}
+      if(!activity){activity=document.createElement('details');activity.className='chat-activity';activity.dataset.chatKey=`${turnKey}:activity:${messageKey(message.text)}`;activity.open=expanded.get(activity.dataset.chatKey)??false;activity.append(document.createElement('summary'));target.append(activity);toolCount=0;errorCount=0;}
       if(message.role==='toolResult')toolCount++;
-      activity.firstElementChild!.textContent=toolCount?`Activity · ${toolCount} tool${toolCount===1?'':'s'}`:'Activity · planning';
+      if(message.error)errorCount++;
+      activity.firstElementChild!.textContent=(toolCount?`Activity · ${toolCount} tool${toolCount===1?'':'s'}`:'Activity · planning')+(errorCount?` · ${errorCount} error${errorCount===1?'':'s'}`:'');
       item.dataset.chatKey=`${turnKey}:tool:${messageKey((message.tool??'')+message.text)}`;
       (item as HTMLDetailsElement).open=expanded.get(item.dataset.chatKey)??Boolean(message.error);
       activity.append(item);
-      if(message.error&&expanded.get(activity.dataset.chatKey!)===undefined)activity.open=true;
+      if(message.error&&state.error&&expanded.get(activity.dataset.chatKey!)===undefined)activity.open=true;
     }else{activity=null;target.append(item);}
   }
   log.scrollTop=atBottom?log.scrollHeight:scrollTop;

@@ -127,12 +127,20 @@ body>header{height:54px;min-height:54px;background:#fff;border-bottom:1px solid 
  #viewport{border-radius:0;border:0;box-shadow:none;background:#fff}
  #view-heading{top:12px;left:14px;right:14px}#view-title{font-size:13px;letter-spacing:-.2px;margin-bottom:3px}#view-basis{font-size:9px}
  .command-ribbon{background:var(--surface);border:0}.command-ribbon button{font-size:12px}
- #history li{width:92px;max-width:92px}#history button{height:56px;width:92px;min-width:92px;max-width:92px;padding:2px;gap:1px;border-radius:4px}
- #history .revision-thumb{height:34px;width:84px;border-radius:2px}
+ body main,body.agent-enabled main,body:not(.agent-enabled) main{grid-template-rows:100px minmax(0,1fr) 132px}
+ #design-timeline{height:132px;grid-template-rows:44px 76px}#history{padding:0;scrollbar-width:none}
+ body[data-mobile-pane=parts] main,body[data-mobile-pane=chat] main{grid-template-rows:minmax(0,1fr)}
+ #history li{width:88px;max-width:88px}#history button{height:70px;width:88px;min-width:88px;max-width:88px;padding:2px;gap:1px;border-radius:4px}
+ #history .revision-thumb{height:50px;width:80px;border-radius:2px}
  #history button .commit-label{max-width:84px;font-size:9px;line-height:14px}
- #history button.thumb-unavailable::before{height:34px;width:84px;font-size:8px}
+ #history button.thumb-unavailable::before{height:50px;width:80px;font-size:8px}
  #mobile-navigation button[aria-pressed=true]{background:#f5ede9;color:#9e5c43;border-color:#e5d4cc}
  #chat-form label{display:none}.chat-actions #chat-stop:disabled{display:none}
  #chat-panel .chat-heading h2{font-size:13px}
 }
-@media(max-width:900px) and (max-height:500px){#view-heading{display:none}}
+@media(max-width:900px) and (max-height:500px){
+ #view-heading{display:none}
+ body main,body.agent-enabled main,body:not(.agent-enabled) main{grid-template-rows:52px minmax(0,1fr) 124px}
+ #design-timeline{height:124px;grid-template-rows:44px 72px}
+ body[data-mobile-pane=parts] main,body[data-mobile-pane=chat] main{grid-template-rows:minmax(0,1fr)}
+}

@@ -16,6 +16,19 @@ test('selected thumbnail is revealed without snapping manual scrolling on every 
  expect(await strip.evaluate(el=>el.scrollLeft)).toBe(0);
 });
 
+test('fitted model remains framed when desktop becomes a phone viewport',async({page})=>{
+ await page.goto('/');await expect(page.locator('#viewport')).toHaveAttribute('data-revision',/[a-f0-9]{32}/);
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);
+ const image=await page.locator('#viewport').screenshot();
+ const bounds=await page.evaluate(async bytes=>{
+  const bitmap=await createImageBitmap(new Blob([new Uint8Array(bytes)],{type:'image/png'}));const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;const ctx=c.getContext('2d')!;ctx.drawImage(bitmap,0,0);const d=ctx.getImageData(0,0,c.width,c.height).data;
+  let minX=c.width,maxX=0,count=0;
+  for(let y=60;y<c.height-30;y++)for(let x=0;x<c.width;x++){const i=(y*c.width+x)*4;if(Math.max(d[i],d[i+1],d[i+2])-Math.min(d[i],d[i+1],d[i+2])>35){minX=Math.min(minX,x);maxX=Math.max(maxX,x);count++;}}
+  return {minX,maxX,count,width:c.width};
+ },Array.from(image));
+ expect(bounds.count).toBeGreaterThan(1000);expect(bounds.minX).toBeGreaterThan(2);expect(bounds.maxX).toBeLessThan(bounds.width-3);
+});
+
 for(const width of [1024,1440]) test(`studio conversation left, thumbnail history and compact exchanges at ${width}px`,async({page,request})=>{
  await page.setViewportSize({width,height:960});
  let extra=false;

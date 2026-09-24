@@ -118,7 +118,13 @@ if (renderer) {
 const controls = renderer
   ? new OrbitControls(camera, renderer.domElement)
   : null;
-if (controls) controls.enableDamping = true;
+let autoFit=true,interacting=false;
+if (controls){
+  controls.enableDamping=true;
+  controls.addEventListener('start',()=>{interacting=true;});
+  controls.addEventListener('end',()=>{interacting=false;});
+  controls.addEventListener('change',()=>{if(interacting)autoFit=false;});
+}
 function updateFallbackImage(revision: string) {
   fallbackImage.src = projectPath(`/api/revisions/${revision}/artifacts/render-${exploded ? "exploded" : currentView}.png`);
   fallbackImage.hidden = false;
@@ -196,6 +202,7 @@ $("explode").onclick = () => {
   view(currentView);
 };
 function view(name: string) {
+  autoFit=true;
   currentView = name;
   document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===name)));
   if (!renderer && viewport.dataset.revision)
@@ -241,6 +248,7 @@ new ResizeObserver(() => {
   camera.aspect = viewport.clientWidth / viewport.clientHeight;
   camera.updateProjectionMatrix();
   renderer?.setSize(viewport.clientWidth, viewport.clientHeight);
+  if(autoFit&&!modelBounds.isEmpty())view(currentView);
 }).observe(viewport);
 view("iso");
 document
