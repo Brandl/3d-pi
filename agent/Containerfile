@@ -5,6 +5,7 @@ COPY agent/package.json agent/package-lock.json ./
 RUN npm ci --ignore-scripts --omit=dev
 COPY agent/main.mjs agent/server.mjs agent/credentials.mjs agent/health.mjs agent/projects.mjs ./
 COPY .pi/extensions/cad.ts ./cad.ts
+COPY .pi/extensions/lib/ ./lib/
 RUN chmod -R a+rX /opt/agent
 ENV PATH="/opt/agent/node_modules/.bin:$PATH" PI_WORKSPACE=/workspace PI_STATE_DIR=/agent-state PI_CODING_AGENT_DIR=/agent-state/pi CAD_URL=http://127.0.0.1:8765 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0
 USER node

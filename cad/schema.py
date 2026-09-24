@@ -40,6 +40,7 @@ class Feature(Strict):
         "sphere",
         "cone",
         "extrude",
+        "extrude_z",
         "union",
         "subtract",
         "intersect",
@@ -70,6 +71,7 @@ class Feature(Strict):
             "sphere": ["radius"],
             "cone": ["size"],
             "extrude": ["points", "height"],
+            "extrude_z": ["points", "height"],
             "fillet": ["radius"],
             "gentle_twist": ["surface"],
         }

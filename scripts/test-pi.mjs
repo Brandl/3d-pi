@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve, join, dirname } from "node:path";
-import { existsSync, realpathSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, realpathSync, mkdtempSync, writeFileSync, readFileSync, statSync, rmSync } from "node:fs";
 import {tmpdir} from 'node:os';
 import { pathToFileURL } from "node:url";
 function findPi() {
@@ -213,6 +213,26 @@ await call("cad_restore", {
 });
 const originalFetch = globalThis.fetch;
 try {
+  const hugeWorkspace = {revision: candidate.revision, generation:19, commit_id:'c19',
+    commits: Array.from({length:19}, (_,i)=>({id:`c${i+1}`,name:`S${i+1}`})),
+    assets:Array.from({length:150}, (_,i)=>({id:i.toString(16).padStart(32,'0'),commit_id:'c19',name:`Asset ${i}`,role:'print',note:'Instructions '.repeat(1000)}))};
+  globalThis.fetch = async (url, options) => String(url).endsWith('/api/state')
+    ? new Response(JSON.stringify({...state, workspace:hugeWorkspace}), {headers:{'Content-Type':'application/json'}})
+    : originalFetch(url, options);
+  const compact = await call('cad_inspect');
+  assert.equal(compact.truncated,undefined);
+  assert.equal(compact.current.revision,candidate.revision);
+  assert.equal(compact.workspace.asset_count,150);
+  assert.equal((await call('cad_inspect',{view:'document'})).document.name,doc.name);
+  const assets=await call('cad_inspect',{view:'history',history_kind:'assets',limit:5});
+  assert.equal(assets.items.length,5);assert.equal(assets.items[0].note,undefined);
+  const attachment=await call('cad_inspect',{view:'asset',asset_id:assets.items[0].id});
+  assert.equal(attachment.asset.note,'Instructions '.repeat(1000));
+  await assert.rejects(()=>call('cad_inspect',{view:'asset'}),/requires asset_id/);
+  globalThis.fetch=originalFetch;
+  const unchecked=await call('cad_validate',{revision:candidate.revision,section:'exports'});
+  assert.equal(unchecked.status,'not_checked');assert.equal(unchecked.valid,null);
+  assert.equal(unchecked.geometry_valid,true);
   globalThis.fetch = async (url, options) =>
     String(url).includes("/artifacts/review-")
       ? new Response("missing", { status: 404 })
@@ -244,6 +264,10 @@ try {
   const output = (await raw("cad_capabilities", {})).content[0].text;
   assert.equal(JSON.parse(output).truncated, true);
   assert.ok(Buffer.byteLength(output) <= 45000);
+  const fullOutput = JSON.parse(output).full_output_path;
+  assert.equal(statSync(fullOutput).mode & 0o777, 0o600);
+  assert.equal(JSON.parse(readFileSync(fullOutput, 'utf8')).data.length, 'very long output '.repeat(10000).length);
+  rmSync(dirname(fullOutput), {recursive:true, force:true});
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ detail: "Runtime constraint rejected" }), {
       status: 422,
@@ -275,7 +299,8 @@ try {
   assert.equal((await call('cad_commit',input)).id,committed.id);
   const asset=await call('cad_attach',{commit:committed.id,revision:changed.revision,role:'test',name:'Test variant',request_key:randomUUID()});
   assert.equal(asset.role,'test');
-  const after=await call('cad_inspect');assert.equal(after.workspace.revision,candidate.revision);assert.equal(after.generation,before.generation);assert.equal(after.workspace.commits.length,1);
+  const after=await call('cad_inspect');assert.equal(after.workspace.revision,candidate.revision);assert.equal(after.generation,before.generation);assert.equal(after.workspace.commit_count,1);
+  assert.equal(after.workspace.current_commit.id,committed.id);
   writeFileSync(join(gitRepo,'document.json'),JSON.stringify({...doc,name:'Dirty source'}));
   await assert.rejects(()=>call('cad_commit',{...input,request_key:randomUUID()}),/Commit tracked source/);
 } finally {toolCwd=originalCwd;process.chdir(originalCwd);rmSync(gitRepo,{recursive:true,force:true});}

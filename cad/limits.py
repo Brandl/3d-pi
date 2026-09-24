@@ -17,7 +17,12 @@ CASTING_BOX_LIMITS = {
 def capabilities():
     return {
         "schema_version": 1,
-        "tool_contract_version": 4,
+        "tool_contract_version": 5,
+        "declarative_limits": {"features": 100, "profile_points": 100, "boolean_inputs": 32},
+        "extrusion": {
+            "recommended": "extrude_z: positive height along local +Z, independent of winding; placement applied afterwards",
+            "legacy": "extrude: signed profile winding controls local direction; clockwise extends toward -Z. Preserved for historical compatibility.",
+        },
         "tree_schema_version": 1,
         "units": "mm",
         "casting_box_limits_mm": {
@@ -30,7 +35,8 @@ def capabilities():
             "These are casting-box limits, not a complete list of geometric/analytical constraints. Candidate validation remains required.",
         ],
         "design_commits": {
-            "tool": "cad_commit", "required_metadata": ["name", "icon", "source_file"],
+            "tool": "cad_commit",
+            "required_metadata": ["name", "icon", "source_file"],
             "generation": "workspace.generation, separate from publication generation",
             "outputs": "cad_attach links inspection/print/test artifacts without changing the working design",
             "source": "Clean Git HEAD document must exactly match normalized immutable CAD source",

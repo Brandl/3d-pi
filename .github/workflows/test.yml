@@ -18,6 +18,7 @@ jobs:
       - run: uv run pytest -q
         env:
           OPENBLAS_NUM_THREADS: '1'
+      - run: node --test scripts/cad-presentation.test.mjs
       - run: npm ci --ignore-scripts && npm test
         working-directory: agent
       - run: npm ci && npm run build && npx playwright install --with-deps chromium

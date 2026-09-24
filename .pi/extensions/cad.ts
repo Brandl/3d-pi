@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { compactWorkspace, historyPage, validationView } from "./lib/cad-presentation.mjs";
 const git = async (cwd: string, ...args: string[]) => (await promisify(execFile)('git', args, {cwd, timeout: 10000, maxBuffer: 256 * 1024})).stdout.trim();
 import { Type, type Static, type TSchema } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -80,17 +84,21 @@ async function request(
     );
   return response.json();
 }
-function text(data: unknown) {
+async function text(data: unknown) {
   const value = JSON.stringify(data, null, 2);
   const trimmed = truncateHead(value, { maxBytes: 40000, maxLines: 1200 });
   let output = value;
   if (trimmed.truncated) {
+    const directory = await mkdtemp(join(tmpdir(), "cad-tool-output-"));
+    const fullOutputPath = join(directory, "result.json");
+    await writeFile(fullOutputPath, value, {mode: 0o600});
     let preview = trimmed.content;
     do {
       output = JSON.stringify({
         truncated: true,
         preview,
-        next: "Use a focused inspect view, history page, tree node, part or validation section.",
+        full_output_path: fullOutputPath,
+        next: "Read full_output_path with the read tool (offset/limit), or request a focused history page/tree node/validation section.",
       });
       if (Buffer.byteLength(output) <= 45000) break;
       preview = preview.slice(0, Math.floor(preview.length * 0.8));
@@ -342,7 +350,7 @@ export default function (pi: ExtensionAPI) {
               signal,
             );
             if (review.details.complete) rememberCheckpoint(input.revision);
-            const checkpoint = text({
+            const checkpoint = await text({
               revision: input.revision,
               status: "visual_review_required",
               published: false,
@@ -356,7 +364,7 @@ export default function (pi: ExtensionAPI) {
           }
         }
         const data: any = await execute(params, signal, id, ctx.cwd ?? process.cwd());
-        const output = text(data);
+        const output = await text(data);
         const candidate = ["cad_build", "cad_parameters"].includes(name)
           ? data
           : name === "cad_inspect" &&
@@ -422,35 +430,27 @@ export default function (pi: ExtensionAPI) {
   );
   tool(
     "cad_inspect",
-    "Inspect state or an immutable revision. Default summary is compact; view=document returns editable source, diagnostics returns failure details, history is paginated. Does not change selection or restore.",
+    "Inspect state or an immutable revision. Summary has only a compact working-state header. document returns source; diagnostics returns failure details. history paginates publications/builds/commits/assets without attachment instructions; asset + asset_id reads one full attachment. Oversize results are saved to a private file for read offset/limit. Never changes selection or restores.",
     Type.Object({
       revision: Type.Optional(revision),
       view: Type.Optional(
-        StringEnum(["summary", "document", "diagnostics", "history"]),
+        StringEnum(["summary", "document", "diagnostics", "history", "asset"]),
       ),
-      history_kind: Type.Optional(StringEnum(["publications", "builds"])),
+      history_kind: Type.Optional(StringEnum(["publications", "builds", "commits", "assets"])),
+      asset_id: Type.Optional(revision),
+      commit: Type.Optional(revision),
       offset: Type.Optional(Type.Integer({ minimum: 0 })),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
     }),
     async (p, s) => {
       const state = await request("/api/state", undefined, s);
-      if (p.view === "history") {
-        const kind = p.history_kind ?? "publications",
-          items = kind === "publications" ? state.publications : state.history,
-          offset = p.offset ?? 0,
-          limit = p.limit ?? 20;
-        return {
-          revision: state.revision,
-          generation: state.generation,
-          kind,
-          items: items.slice(offset, offset + limit),
-          total_available: items.length,
-          next_offset: offset + limit < items.length ? offset + limit : null,
-          note:
-            kind === "builds"
-              ? "Service retains only the latest 100 builds in this listing; publications are complete."
-              : undefined,
-        };
+      if (p.view === "history")
+        return historyPage(state, p.history_kind ?? "publications", p.offset ?? 0, p.limit ?? 20, p.commit);
+      if (p.view === "asset") {
+        if (!p.asset_id) throw new Error("view=asset requires asset_id from history_kind=assets");
+        const asset = state.workspace?.assets?.find((a: any) => a.id === p.asset_id);
+        if (!asset) throw new Error("Unknown attachment in this project");
+        return {workspace: compactWorkspace(state.workspace), asset};
       }
       const id = p.revision ?? state.workspace?.revision ?? state.revision;
       const row = id
@@ -460,7 +460,7 @@ export default function (pi: ExtensionAPI) {
         revision: row?.id ?? null,
         published_revision: state.revision,
         generation: state.generation,
-        workspace: state.workspace,
+        workspace: compactWorkspace(state.workspace),
         current: row ? brief(row) : null,
         ...(p.view === "document" ? { document: row?.document } : {}),
         ...(p.view === "diagnostics" ? { diagnostics: row?.result } : {}),
@@ -659,38 +659,8 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async (p, s) => {
-      const r = await request(
-          `/api/revisions/${p.revision}/report`,
-          undefined,
-          s,
-        ),
-        section = p.section ?? "summary";
-      if (section === "all") return r;
-      const sections = {
-        checks: r.checks,
-        mesh: r.mesh_validation,
-        exports: {
-          master: r.export_validation,
-          tooling: r.casting_box?.part_validation,
-        },
-        assembly: r.casting_box?.assembly_checks,
-      };
-      return {
-        revision: p.revision,
-        valid: r.valid,
-        section,
-        ...(section === "summary"
-          ? {
-              checks: r.checks,
-              mesh: r.mesh_validation,
-              available_sections: Object.entries(sections)
-                .filter(([, v]) => v !== undefined)
-                .map(([key]) => key),
-              limitations: r.limitations,
-              note: "Passing modeled checks is not physical testing. Inspect assembly and export sections for tooling.",
-            }
-          : { results: sections[section] ?? null }),
-      };
+      const report = await request(`/api/revisions/${p.revision}/report`, undefined, s);
+      return validationView(report, p.revision, p.section ?? "summary");
     },
   );
   for (const operation of ["publish", "restore"] as const)

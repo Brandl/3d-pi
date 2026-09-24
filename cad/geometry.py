@@ -20,6 +20,11 @@ def construct(doc: Document):
             raise ValueError("Lengths must be between 0.01 and 2000 mm")
         return n
 
+    def normalize(shape):
+        # A Boolean may return ShapeList even when its inputs were solids.
+        # Normalize EACH intermediate result, not only the completed feature.
+        return b.Compound(children=list(shape)) if isinstance(shape, (list, b.ShapeList)) else shape
+
     nodes = {}
     for feature in doc.features:
         try:
@@ -48,11 +53,14 @@ def construct(doc: Document):
                         length(height),
                         align=(b.Align.CENTER, b.Align.CENTER, b.Align.MIN),
                     )
-                case "extrude":
+                case "extrude" | "extrude_z":
                     points = [(val(x), val(y)) for x, y in feature.points]
                     if any(abs(v) > 2000 for point in points for v in point):
                         raise ValueError("Profile coordinates must be within +/-2000 mm")
-                    shape = b.extrude(b.Polygon(*points, align=None), amount=length(feature.height))
+                    direction = {"dir": (0, 0, 1)} if feature.op == "extrude_z" else {}
+                    shape = b.extrude(
+                        b.Polygon(*points, align=None), amount=length(feature.height), **direction
+                    )
                 case "union" | "subtract" | "intersect":
                     shape = args[0]
                     for operand in args[1:]:
@@ -62,6 +70,9 @@ def construct(doc: Document):
                             shape = shape.cut(operand)
                         else:
                             shape = shape.intersect(operand)
+                        shape = normalize(shape)
+                        if shape is None or not shape.solids():
+                            break
                 case "fillet":
                     edges = args[0].edges()
                     if feature.edges != "all":
@@ -77,8 +88,7 @@ def construct(doc: Document):
                 case "transform":
                     shape = args[0]
             # ShapeList can result from disconnected boolean results. Preserve all solids.
-            if isinstance(shape, (list, b.ShapeList)):
-                shape = b.Compound(children=list(shape))
+            shape = normalize(shape)
             if shape is None or not shape.is_valid or not shape.solids() or shape.volume <= 0:
                 raise ValueError("Operation did not produce a valid non-empty solid")
             position = tuple(val(x) for x in feature.position)
@@ -126,7 +136,22 @@ def inspection(parts, doc, expressions):
                 "passed": abs(actual - expected) <= check.tolerance,
             }
         )
+    warnings = []
+    for feature in doc.features:
+        if feature.op == "extrude":
+            points = [(expressions.value(x), expressions.value(y)) for x, y in feature.points]
+            area = sum(a[0] * z[1] - z[0] * a[1] for a, z in zip(points, points[1:] + points[:1]))
+            if area < 0:
+                warnings.append(
+                    {
+                        "code": "legacy_clockwise_extrusion",
+                        "feature": feature.name,
+                        "message": "Legacy extrude follows winding: positive height extends along local -Z. "
+                        "Use extrude_z for winding-independent local +Z in NEW designs; do not silently rewrite old geometry.",
+                    }
+                )
     return {
+        "warnings": warnings,
         "units": {"length": "mm", "area": "mm²", "volume": "mm³"},
         "parameters": expressions.resolved,
         "parts": measurements,
