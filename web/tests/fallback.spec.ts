@@ -2,7 +2,8 @@ import { test, expect } from "@playwright/test";
 
 test("loads an image preview when WebGL and WebSocket are unavailable", async ({ page, request }) => {
   const state = await (await request.get("/api/state")).json();
-  test.skip(!state.revision, "Requires a published model");
+  const revision=state.workspace?.revision??state.revision;
+  test.skip(!revision, "Requires a working or published model");
   await page.addInitScript(() => {
     const getContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type: string, ...args: unknown[]) {
@@ -16,7 +17,7 @@ test("loads an image preview when WebGL and WebSocket are unavailable", async ({
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
-  await expect(page.locator("#viewport")).toHaveAttribute("data-revision", state.revision);
+  await expect(page.locator("#viewport")).toHaveAttribute("data-revision", revision);
   await expect(page.locator("#connection")).toContainText("polling");
   await expect(page.locator("#geometry-status")).toContainText("WebGL unavailable");
   const image = page.getByAltText("Server-rendered CAD model preview");

@@ -28,5 +28,6 @@ for(const width of [320,390,430,768,844]) test(`phone workspace panes and touch 
  await expect(page.locator('#mobile-account').getByRole('button',{name:'Sign out',exact:true})).toBeVisible();
  expect(await page.locator('#files-drawer').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  await page.getByRole('button',{name:'Close',exact:true}).click();
- await page.setViewportSize({width:1440,height:900});await expect(nav).toBeHidden();await expect(page.locator('#viewport')).toBeVisible();await expect(page.locator('#model-parts')).toBeVisible();await expect(page.locator('#chat-input')).toBeVisible();
+ await page.setViewportSize({width:1440,height:900});await expect(nav).toBeHidden();await expect(page.locator('#viewport')).toBeVisible();await expect(page.locator('#model-parts')).toBeHidden();await expect(page.locator('#chat-input')).toBeVisible();
+ await page.getByRole('navigation',{name:'Design workspace',exact:true}).getByRole('button',{name:'Parts',exact:true}).click();await expect(page.locator('#model-parts')).toBeVisible();
 });

@@ -5,8 +5,9 @@ test("browser uses revision-bound service tree and ignores stale component detai
   request,
 }) => {
   const state = await (await request.get("/api/state")).json();
-  test.skip(!state.revision, "Requires a published design");
-  const response = await request.get(`/api/revisions/${state.revision}/tree`);
+  const revision = state.workspace?.revision ?? state.revision;
+  test.skip(!revision, "Requires a working or published design");
+  const response = await request.get(`/api/revisions/${revision}/tree`);
   expect(response.ok()).toBeTruthy();
   const tree = await response.json();
   const parts = tree.root.children
@@ -17,7 +18,7 @@ test("browser uses revision-bound service tree and ignores stale component detai
   await page.goto("/");
   await expect(page.locator("#assembly-tree")).toHaveAttribute(
     "data-revision",
-    state.revision,
+    revision,
   );
   let release!: () => void;
   const delayed = new Promise<void>((resolve) => (release = resolve));
@@ -29,6 +30,7 @@ test("browser uses revision-bound service tree and ignores stale component detai
       await route.fulfill({ response: result });
     },
   );
+  await page.getByRole('navigation', {name:'Design workspace', exact:true}).getByRole('button', {name:'Parts', exact:true}).click();
   await page.locator(`[data-component="${first.id}"]`).click();
   await page.locator(`[data-component="${second.id}"]`).click();
   await expect(page.locator("#component-inspector h3")).toHaveText(second.name);

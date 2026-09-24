@@ -129,7 +129,7 @@ scene.add(light);
 const fill = new THREE.DirectionalLight(0x9bcfff, 1.5);
 fill.position.set(-150, 100, 80);
 scene.add(fill);
-const grid = new THREE.GridHelper(500, 50, 0x91aa98, 0xc3d2c3);
+const grid = new THREE.GridHelper(500, 50, 0xadb3bf, 0xd4d8e0);
 grid.rotation.x = Math.PI / 2;
 grid.position.z = -0.1;
 scene.add(grid);
@@ -331,6 +331,9 @@ function details(row: Revision) {
   const related=latest?.workspace?.assets.find(a=>a.revision===row.id);
   $("title").textContent = related?.name ?? named?.name ?? row.document.name;
   $("title").title=row.document.name;
+  const facts=$('view-facts');facts.replaceChildren();
+  for(const value of [`${Object.keys(row.result.report.parts).length} parts`, `Viewed ${row.id.slice(0,8)}`, 'mm']){const badge=document.createElement('span');badge.textContent=value;facts.append(badge);}
+  facts.title='Facts for the viewed geometry, which may differ from the working design.';
   $("revision").textContent = `Revision ${row.id.slice(0, 8)}`;
   $("part-count").textContent = String(
     Object.keys(row.result.report.parts).length,

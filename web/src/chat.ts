@@ -1,6 +1,6 @@
 import {projectPath, projectId} from './project-path';
 import {formatChatText} from './chat-format';
-type ChatMessage = {role:string;text:string;tools?:string[];tool?:string;error?:boolean};
+type ChatMessage = {role:string;text:string;tools?:string[];tool?:string;error?:boolean;timestamp?:number|string};
 type AgentState = {sessionId:string;model:string;busy:boolean;sequence:number;messages:ChatMessage[];
   partial:ChatMessage|null;activeTools:string[];error:string;job?:{status:string;error?:string}};
 const element=(id:string)=>document.getElementById(id)!;
@@ -8,6 +8,11 @@ let csrf='';
 let busy=false;
 let pending=false;
 let lastProjection='';
+function visibleText(message:ChatMessage){
+  const at=message.role==='user'?Math.max(message.text.lastIndexOf('\n\n[Workspace context:'),message.text.lastIndexOf('\n\n[Viewer context:')):-1;
+  return at<0?message.text:message.text.slice(0,at);
+}
+function messageKey(text:string){let hash=2166136261;for(let i=0;i<text.length;i++)hash=Math.imul(hash^text.charCodeAt(i),16777619);return (hash>>>0).toString(36);}
 function login() {
   location.assign('/auth/login?next='+encodeURIComponent(location.pathname+location.search));
 }
@@ -28,17 +33,40 @@ function render(state:AgentState) {
   busy=state.busy;controls();
   element('chat-model').textContent=state.model||'No model configured';
   element('chat-status').textContent=state.error ||
-    (state.activeTools.length?`Working: ${state.activeTools.join(', ')}`:busy?'Working…':['interrupted','aborted','failed'].includes(state.job?.status??'')?`Turn ${state.job?.status}. Previous changes may remain.`:'Ready');
-  const projection=JSON.stringify([state.messages,state.partial]);
+    (state.activeTools.length?`Working · ${state.activeTools.length} active tool${state.activeTools.length===1?'':'s'}`:busy?'Thinking…':['interrupted','aborted','failed'].includes(state.job?.status??'')?`Turn ${state.job?.status}. Previous changes may remain.`:'Ready');
+  element('chat-status').title=state.activeTools.join(', ');
+  const projection=JSON.stringify([state.sessionId,state.messages,state.partial]);
   if(projection===lastProjection)return;
   lastProjection=projection;
   const log=element('chat-messages');
-  const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<70;
+  const scrollTop=log.scrollTop;
+  const atBottom=log.scrollHeight-scrollTop-log.clientHeight<70;
+  const expanded=new Map(Array.from(log.querySelectorAll<HTMLDetailsElement>('details[data-chat-key]')).map(d=>[d.dataset.chatKey!,d.open]));
   log.replaceChildren();
   const messages=[...state.messages,...(state.partial?[state.partial]:[])];
+  const lastUser=messages.map(m=>m.role).lastIndexOf('user');
+  let target:HTMLElement=log;
   let activity:HTMLDetailsElement|null=null;
   let toolCount=0;
-  for(const message of messages) {
+  let turnKey='initial';
+  const occurrences=new Map<string,number>();
+  for(const [index,message] of messages.entries()) {
+    if(message.role==='user'){
+      activity=null;target=log;
+      const hash=messageKey(message.text);const occurrence=(occurrences.get(hash)??0)+1;occurrences.set(hash,occurrence);turnKey=`${state.sessionId}:${message.timestamp??`${hash}:${occurrence}`}`;
+      if(index<lastUser){
+        const next=messages.findIndex((m,i)=>i>index&&m.role==='user');
+        const turn=messages.slice(index,next<0?messages.length:next);
+        const lastAnswer=[...turn].reverse().find(m=>m.role==='assistant'&&m.text&&!m.tools?.length);
+        const errors=turn.some(m=>m.error);
+        const card=document.createElement('details');card.className='chat-turn';card.dataset.chatKey=turnKey;card.open=expanded.get(turnKey)??errors;
+        const summary=document.createElement('summary');const label=document.createElement('strong');label.textContent=errors?'Earlier request · tool error':'Earlier request';
+        const prompt=document.createElement('span');const request=visibleText(message);prompt.textContent=request.slice(0,130)+(request.length>130?'…':'');
+        summary.append(label,prompt);
+        if(lastAnswer){const preview=document.createElement('span');preview.className='turn-preview';preview.textContent=lastAnswer.text.slice(0,200)+(lastAnswer.text.length>200?'…':'');summary.append(preview);}
+        const body=document.createElement('div');body.className='chat-turn-body';card.append(summary,body);log.append(card);target=body;
+      }
+    }
     if(!message.text)continue;
     const item=document.createElement(message.role==='toolResult'?'details':'article');
     item.className=`chat-message ${message.role}`;
@@ -51,13 +79,15 @@ function render(state:AgentState) {
     item.append(title,text);
     if(message.tools?.length){const tools=document.createElement('small');tools.textContent=`Tools: ${message.tools.join(', ')}`;item.append(tools);}
     if(message.role==='toolResult'){
-      if(!activity){activity=document.createElement('details');activity.className='chat-activity';activity.append(document.createElement('summary'));log.append(activity);toolCount=0;}
+      if(!activity){activity=document.createElement('details');activity.className='chat-activity';activity.dataset.chatKey=`${turnKey}:activity:${messageKey(message.text)}`;activity.open=expanded.get(activity.dataset.chatKey)??false;activity.append(document.createElement('summary'));target.append(activity);toolCount=0;}
       activity.firstElementChild!.textContent=`Activity · ${++toolCount} tool${toolCount===1?'':'s'}`;
+      item.dataset.chatKey=`${turnKey}:tool:${messageKey((message.tool??'')+message.text)}`;
+      (item as HTMLDetailsElement).open=expanded.get(item.dataset.chatKey)??Boolean(message.error);
       activity.append(item);
-      if(message.error){activity.open=true;(item as HTMLDetailsElement).open=true;}
-    }else{activity=null;log.append(item);}
+      if(message.error&&expanded.get(activity.dataset.chatKey!)===undefined)activity.open=true;
+    }else{activity=null;target.append(item);}
   }
-  if(atBottom)log.scrollTop=log.scrollHeight;
+  log.scrollTop=atBottom?log.scrollHeight:scrollTop;
 }
 async function poll() {
   try {render(await call('/api/agent/state'));}

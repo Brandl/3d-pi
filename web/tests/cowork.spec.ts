@@ -19,6 +19,7 @@ for(const fallback of [false,true]) test(`working design, timeline, files and se
  await expect(page.locator('#history')).toContainText(workspace.commits[0].name);
  await expect(page.locator('#timeline-status')).toHaveText('Working design');
  if(fallback)await expect(page.locator('#section-view')).toBeDisabled();else{await page.locator('#section-view').click();await expect(page.locator('#section-view')).toHaveAttribute('aria-pressed','true');await expect(viewport).toHaveAttribute('data-revision',workspace.revision);}
+ await page.getByRole('navigation',{name:'Design workspace',exact:true}).getByRole('button',{name:'Parts',exact:true}).click();
  await page.locator('[data-component="part:enclosure"]').click();
  await expect(viewport).toHaveAttribute('data-component','part:enclosure');
  await expect(page.locator('#chat-context')).toContainText('enclosure');

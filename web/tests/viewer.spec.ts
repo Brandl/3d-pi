@@ -7,10 +7,14 @@ test("live publication, camera controls, last-good model, restore, reconnect", a
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  const initial = await (await request.get("/api/state")).json();
+  // Legacy publication behaviour needs a project without a working-design head.
+  // Never make this test depend on (or overwrite) the workspace fixtures.
+  const project = await (await request.post('/api/projects', {data:{name:`Viewer regression ${randomUUID().slice(0,8)}`}})).json();
+  const scoped = (path:string) => `/projects/${project.id}${path}`;
+  const initial = await (await request.get(scoped("/api/state"))).json();
   const doc = await (await request.get("/api/example")).json();
   async function build(document: unknown, generation: number) {
-    const response = await request.post("/api/builds", {
+    const response = await request.post(scoped("/api/builds"), {
       data: {
         document,
         expected_generation: generation,
@@ -23,7 +27,7 @@ test("live publication, camera controls, last-good model, restore, reconnect", a
     await expect
       .poll(
         async () => {
-          result = await (await request.get(`/api/revisions/${row.id}`)).json();
+          result = await (await request.get(scoped(`/api/revisions/${row.id}`))).json();
           return ["queued", "building"].includes(result.status);
         },
         { timeout: 110000, intervals: [250, 500] },
@@ -31,13 +35,13 @@ test("live publication, camera controls, last-good model, restore, reconnect", a
       .toBe(false);
     return result;
   }
-  await page.goto("/");
+  await page.goto(`/?project=${project.id}`);
   await expect(page.locator("#connection")).toContainText("Live");
   const first = await build(doc, initial.generation);
   expect(first.status).toBe("ready");
   expect(
     (
-      await request.post(`/api/revisions/${first.id}/publish`, {
+      await request.post(scoped(`/api/revisions/${first.id}/publish`), {
         data: { expected_generation: initial.generation },
       })
     ).status(),
@@ -62,7 +66,7 @@ test("live publication, camera controls, last-good model, restore, reconnect", a
   );
   expect(
     (
-      await request.post(`/api/revisions/${second.id}/publish`, {
+      await request.post(scoped(`/api/revisions/${second.id}/publish`), {
         data: { expected_generation: initial.generation + 1 },
       })
     ).status(),
@@ -81,7 +85,7 @@ test("live publication, camera controls, last-good model, restore, reconnect", a
   );
   expect(
     (
-      await request.post(`/api/revisions/${first.id}/restore`, {
+      await request.post(scoped(`/api/revisions/${first.id}/restore`), {
         data: { expected_generation: initial.generation + 2 },
       })
     ).status(),
