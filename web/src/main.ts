@@ -43,6 +43,7 @@ type Part = {
   z: number;
   volume: number;
   solid_count: number;
+  bounds?: {min:number[];max:number[]};
   color?: string;
   role?: string;
   export_triangles?: number;
@@ -132,8 +133,10 @@ scene.add(fill);
 const grid = new THREE.GridHelper(500, 50, 0xadb3bf, 0xd4d8e0);
 grid.rotation.x = Math.PI / 2;
 grid.position.z = -0.1;
-scene.add(grid);
-scene.add(new THREE.AxesHelper(20));
+const guides=new THREE.Group();guides.add(grid,new THREE.AxesHelper(20));guides.visible=false;scene.add(guides);
+const gridButton=document.createElement('button');gridButton.textContent='Grid';gridButton.setAttribute('aria-pressed','false');gridButton.title='Show reference grid and axes';gridButton.disabled=!renderer;
+gridButton.onclick=()=>{guides.visible=!guides.visible;gridButton.setAttribute('aria-pressed',String(guides.visible));};
+document.querySelector('nav[aria-label="Camera controls"]')!.append(gridButton);
 let model = new THREE.Group();
 scene.add(model);
 function highlight(part:string|null){
@@ -146,6 +149,7 @@ if(renderer){
   renderer.domElement.addEventListener('pointerup',e=>{if(e.button!==0||Math.hypot(e.clientX-down.x,e.clientY-down.y)>4)return;const rect=renderer.domElement.getBoundingClientRect();const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),camera);const hit=ray.intersectObjects(model.children,true).find(h=>h.object instanceof THREE.Mesh);if(hit)window.dispatchEvent(new CustomEvent('cad:pick',{detail:{part:hit.object.name}}));});
 }
 let radius = 100;
+let modelBounds=new THREE.Box3();
 let center = new THREE.Vector3(0, 0, 0);
 let currentView = "iso";
 let exploded = false;
@@ -178,6 +182,7 @@ function layoutModel() {
     });
   }
   const bounds = new THREE.Box3().setFromObject(model);
+  modelBounds.copy(bounds);
   grid.position.z = bounds.min.z - 0.5;
   const sphere = bounds.getBoundingSphere(new THREE.Sphere());
   radius = Math.max(sphere.radius, 1);
@@ -192,6 +197,7 @@ $("explode").onclick = () => {
 };
 function view(name: string) {
   currentView = name;
+  document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===name)));
   if (!renderer && viewport.dataset.revision)
     updateFallbackImage(viewport.dataset.revision);
   const direction =
@@ -209,8 +215,18 @@ function view(name: string) {
         ),
     ),
   );
-  const distance =
-    (radius / Math.sin(THREE.MathUtils.degToRad(limitingFov / 2))) * 1.15;
+  let distance = (radius / Math.sin(THREE.MathUtils.degToRad(limitingFov / 2))) * 1.15;
+  if(!modelBounds.isEmpty()){
+    const normal=direction.clone().normalize();
+    const right=new THREE.Vector3().crossVectors(camera.up,normal).normalize();
+    const up=new THREE.Vector3().crossVectors(normal,right).normalize();
+    const tanY=Math.tan(THREE.MathUtils.degToRad(camera.fov/2)),tanX=tanY*camera.aspect;
+    distance=1;
+    for(const x of [modelBounds.min.x,modelBounds.max.x])for(const y of [modelBounds.min.y,modelBounds.max.y])for(const z of [modelBounds.min.z,modelBounds.max.z]){
+      const point=new THREE.Vector3(x,y,z).sub(center),depth=point.dot(normal);
+      distance=Math.max(distance,depth+1.22*Math.abs(point.dot(right))/tanX,depth+1.22*Math.abs(point.dot(up))/tanY);
+    }
+  }
   controls?.target.copy(center);
   camera.position
     .copy(center)
@@ -331,9 +347,17 @@ function details(row: Revision) {
   const related=latest?.workspace?.assets.find(a=>a.revision===row.id);
   $("title").textContent = related?.name ?? named?.name ?? row.document.name;
   $("title").title=row.document.name;
+  $('view-title').textContent=related?.name??named?.name??row.document.name;
+  $('view-basis').textContent=related?'Inspection output · browsing only':row.id===(latest?.workspace?.revision??latest?.revision)?'Working design · geometry preview':'History preview · working design unchanged';
   const facts=$('view-facts');facts.replaceChildren();
-  for(const value of [`${Object.keys(row.result.report.parts).length} parts`, `Viewed ${row.id.slice(0,8)}`, 'mm']){const badge=document.createElement('span');badge.textContent=value;facts.append(badge);}
-  facts.title='Facts for the viewed geometry, which may differ from the working design.';
+  const parts=Object.values(row.result.report.parts);
+  const values=[`${parts.length} parts`];
+  if(parts.length&&parts.every(part=>part.bounds)){
+    const dimensions=[0,1,2].map(i=>Math.max(...parts.map(p=>p.bounds!.max[i]))-Math.min(...parts.map(p=>p.bounds!.min[i])));
+    values.push(dimensions.map(n=>format(n)).join(' × ')+' mm');
+  }
+  for(const value of values){const badge=document.createElement('span');badge.textContent=value;facts.append(badge);}
+  facts.title=`Viewed revision ${row.id}. Dimensions are assembly bounding extents, not fit clearances.`;
   $("revision").textContent = `Revision ${row.id.slice(0, 8)}`;
   $("part-count").textContent = String(
     Object.keys(row.result.report.parts).length,

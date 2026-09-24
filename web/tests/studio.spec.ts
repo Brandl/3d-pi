@@ -56,16 +56,21 @@ for(const width of [1024,1440]) test(`studio conversation left, thumbnail histor
  if(before.publications?.length||before.workspace?.commits?.length){
   const thumb=page.locator('#history .revision-thumb').first();
   await expect(thumb).toBeVisible();
-  await expect.poll(()=>thumb.evaluate((el:HTMLImageElement)=>el.naturalWidth)).toBeGreaterThan(0);
+  await expect(thumb).toHaveAttribute('data-rendered','true');
+  await expect.poll(()=>thumb.evaluate((el:HTMLImageElement)=>el.naturalWidth)).toBe(320);
   await page.locator('#history button').first().click();
   await expect(page.locator('#timeline-status')).toContainText('browsing only');
   const after=await (await request.get('/api/state')).json();
   expect(after.workspace).toEqual(before.workspace);expect(after.generation).toEqual(before.generation);
   await page.locator('#timeline-working').click();
  }
- await page.getByRole('navigation',{name:'Design workspace',exact:true}).getByRole('button',{name:'Make',exact:true}).click();
- await expect(page.locator('#files-drawer')).toBeVisible();
- await page.keyboard.press('Escape');
  await page.screenshot({path:`test-results/studio-${width}.png`});
+ await page.getByRole('navigation',{name:'Design workspace',exact:true}).getByRole('button',{name:'Make',exact:true}).click();
+ await expect(page.locator('#make-panel')).toBeVisible();
+ await expect(page.locator('#chat-input')).toBeVisible();
+ await expect(page.locator('#viewport')).toBeHidden();
+ await page.screenshot({path:`test-results/studio-make-${width}.png`});
+ await page.locator('#open-files').click();await expect(page.locator('#files-drawer')).toBeVisible();
+ await page.keyboard.press('Escape');await expect(page.locator('#make-panel #related-files')).toBeVisible();
  expect(errors).toEqual([]);
 });

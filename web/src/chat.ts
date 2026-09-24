@@ -68,19 +68,22 @@ function render(state:AgentState) {
       }
     }
     if(!message.text)continue;
-    const item=document.createElement(message.role==='toolResult'?'details':'article');
-    item.className=`chat-message ${message.role}`;
-    const title=document.createElement(message.role==='toolResult'?'summary':'strong');
-    title.textContent=message.role==='user'?'You':message.role==='toolResult'?`${message.tool || 'Tool'}${message.error?' · error':''}`:'Pi';
+    const planning=message.role==='assistant'&&Boolean(message.tools?.length);
+    const activityMessage=message.role==='toolResult'||planning;
+    const item=document.createElement(activityMessage?'details':'article');
+    item.className=`chat-message ${planning?'planning':message.role}`;
+    const title=document.createElement(activityMessage?'summary':'strong');
+    title.textContent=message.role==='user'?'You':planning?'Progress note':message.role==='toolResult'?`${message.tool || 'Tool'}${message.error?' · error':''}`:'Pi';
     const text=document.createElement('div');
     const contextAt=message.role==='user'?Math.max(message.text.lastIndexOf('\n\n[Workspace context:'),message.text.lastIndexOf('\n\n[Viewer context:')):-1;
     text.className='chat-text';if(message.role==='toolResult')text.textContent=message.text;else formatChatText(text,contextAt<0?message.text:message.text.slice(0,contextAt));
     if(contextAt>=0){const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Model context';const context=document.createElement('small');context.textContent=message.text.slice(contextAt).trim();details.append(summary,context);text.append(details);}
     item.append(title,text);
     if(message.tools?.length){const tools=document.createElement('small');tools.textContent=`Tools: ${message.tools.join(', ')}`;item.append(tools);}
-    if(message.role==='toolResult'){
+    if(activityMessage){
       if(!activity){activity=document.createElement('details');activity.className='chat-activity';activity.dataset.chatKey=`${turnKey}:activity:${messageKey(message.text)}`;activity.open=expanded.get(activity.dataset.chatKey)??false;activity.append(document.createElement('summary'));target.append(activity);toolCount=0;}
-      activity.firstElementChild!.textContent=`Activity · ${++toolCount} tool${toolCount===1?'':'s'}`;
+      if(message.role==='toolResult')toolCount++;
+      activity.firstElementChild!.textContent=toolCount?`Activity · ${toolCount} tool${toolCount===1?'':'s'}`:'Activity · planning';
       item.dataset.chatKey=`${turnKey}:tool:${messageKey((message.tool??'')+message.text)}`;
       (item as HTMLDetailsElement).open=expanded.get(item.dataset.chatKey)??Boolean(message.error);
       activity.append(item);

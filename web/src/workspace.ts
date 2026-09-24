@@ -8,7 +8,7 @@ import './studio.css';
 const $=(id:string)=>document.getElementById(id)!;
 const main=document.querySelector('main')!;
 const timeline=document.querySelector<HTMLElement>('section[aria-label="Design timeline"]')!;
-timeline.id='design-timeline';main.append(timeline);
+timeline.id='design-timeline';timeline.querySelector('h2')!.textContent='History';main.append(timeline);
 const timelineActions=document.createElement('div');timelineActions.id='timeline-actions';timelineActions.append($('timeline-working'));timeline.append(timelineActions);
 const cameras=document.querySelector<HTMLElement>('nav[aria-label="Camera controls"]')!;
 const ribbon=document.createElement('div');ribbon.className='command-ribbon';ribbon.append(cameras);
@@ -24,7 +24,7 @@ const exportSection=$('exports').closest('section')!;
 const legacy=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Export viewed geometry';legacy.append(summary,exportSection);drawer.append(legacy);
 const candidates=document.createElement('details');const cs=document.createElement('summary');cs.textContent='Other build outputs';candidates.append(cs,$('draft-select'));drawer.append(candidates);
 document.body.append(drawer);
-const fileButton=document.createElement('button');fileButton.id='open-files';fileButton.textContent='Files';fileButton.onclick=()=>drawer.showModal();document.querySelector('header')!.append(fileButton);
+const fileButton=document.createElement('button');fileButton.id='open-files';fileButton.textContent='Files';fileButton.onclick=()=>openFiles();document.querySelector('header')!.append(fileButton);
 const library=document.createElement('button');library.id='open-components';library.textContent='Components';library.onclick=()=>{drawer.close();openLibrary();};drawer.append(library);
 const transcript=$('project-transcript');drawer.append(transcript);
 const parameterSection=$('parameters').closest('section')!;
@@ -35,10 +35,26 @@ const facts=document.createElement('div');facts.id='view-facts';facts.setAttribu
 const tabs=document.createElement('nav');tabs.className='studio-tabs';tabs.setAttribute('aria-label','Design workspace');
 const modelTab=document.createElement('button');modelTab.textContent='Model';modelTab.setAttribute('aria-controls','viewport');
 const partsTab=document.createElement('button');partsTab.textContent='Parts';partsTab.setAttribute('aria-controls','model-parts');
-const makeTab=document.createElement('button');makeTab.textContent='Make';makeTab.setAttribute('aria-haspopup','dialog');makeTab.onclick=()=>drawer.showModal();
-function pane(parts:boolean){document.body.dataset.studioPane=parts?'parts':'model';modelTab.setAttribute('aria-pressed',String(!parts));partsTab.setAttribute('aria-pressed',String(parts));}
-modelTab.onclick=()=>pane(false);partsTab.onclick=()=>pane(document.body.dataset.studioPane!=='parts');
-tabs.append(modelTab,partsTab,makeTab);ribbon.prepend(tabs);pane(false);
+const makePanel=document.createElement('section');makePanel.id='make-panel';makePanel.setAttribute('aria-label','Make this design');
+const makeTitle=document.createElement('h2');makeTitle.textContent='Make this design';const makeHint=document.createElement('p');makeHint.className='make-intro';makeHint.textContent='Print files, fit tests and assembly instructions for the selected design. Review the instructions before manufacturing.';
+makePanel.append(makeTitle,makeHint);main.insertBefore(makePanel,timeline);main.prepend($('chat-panel'));
+const makeTab=document.createElement('button');makeTab.textContent='Make';makeTab.setAttribute('aria-controls','make-panel');makeTab.onclick=()=>pane('make');
+function placeFiles(inMake:boolean){if(inMake)makePanel.append(files,legacy);else{drawer.insertBefore(files,candidates);drawer.insertBefore(legacy,candidates);}}
+function openFiles(){placeFiles(false);drawer.showModal();}
+drawer.addEventListener('close',()=>{if(document.body.dataset.studioPane==='make')placeFiles(true);});
+function pane(next:'model'|'parts'|'make'){document.body.dataset.studioPane=next;modelTab.setAttribute('aria-pressed',String(next==='model'));partsTab.setAttribute('aria-pressed',String(next==='parts'));makeTab.setAttribute('aria-pressed',String(next==='make'));placeFiles(next==='make');}
+modelTab.onclick=()=>pane('model');partsTab.onclick=()=>pane(document.body.dataset.studioPane==='parts'?'model':'parts');
+files.addEventListener('click',event=>{if((event.target as HTMLElement).closest('button')?.textContent==='View')pane('model');});
+tabs.append(modelTab,partsTab,makeTab);ribbon.prepend(tabs);pane('model');
 $('section-view').textContent='Clip view';
-$('chat-panel').querySelector('h2')!.textContent='Chat with pi';
+$('chat-panel').querySelector('h2')!.textContent='Chat';
+$('project-new').textContent='+';$('project-new').setAttribute('aria-label','New project');$('project-new').title='New project';
+$('chat-form').querySelector('label')!.textContent='Change this design';
+const viewHeading=document.createElement('div');viewHeading.id='view-heading';
+const viewTitle=document.createElement('h2');viewTitle.id='view-title';viewTitle.textContent='Your design, in focus.';
+const viewBasis=document.createElement('span');viewBasis.id='view-basis';viewBasis.textContent='Start with a message to pi';viewHeading.append(viewTitle,viewBasis);$('viewport').append(viewHeading);
+function icon(button:HTMLElement,paths:string){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths);svg.append(path);button.prepend(svg);}
+icon(modelTab,'M12 3 3 8v9l9 5 9-5V8L12 3ZM3 8l9 5 9-5M12 13v9M7 5.8l9 5');
+icon(partsTab,'M4 5h4v4H4zM12 7h8M4 15h4v4H4zM12 17h8');
+icon(makeTab,'M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6');
 initMobileWorkspace();
