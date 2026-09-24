@@ -5,6 +5,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compactWorkspace, historyPage, validationView } from "./lib/cad-presentation.mjs";
+import { sectionImage } from "./lib/section-image.mjs";
 const git = async (cwd: string, ...args: string[]) => (await promisify(execFile)('git', args, {cwd, timeout: 10000, maxBuffer: 256 * 1024})).stdout.trim();
 import { Type, type Static, type TSchema } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -59,14 +60,15 @@ async function request(
   path: string,
   body?: unknown,
   signal?: AbortSignal,
+  timeout = 30000,
 ): Promise<any> {
   const response = await fetch(endpoint + path, {
     method: body === undefined ? "GET" : "POST",
     headers: body === undefined ? {} : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: signal
-      ? AbortSignal.any([signal, AbortSignal.timeout(30000)])
-      : AbortSignal.timeout(30000),
+      ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
+      : AbortSignal.timeout(timeout),
   });
   if (!response.ok)
     throw new CadError(
@@ -365,6 +367,15 @@ export default function (pi: ExtensionAPI) {
         }
         const data: any = await execute(params, signal, id, ctx.cwd ?? process.cwd());
         const output = await text(data);
+        if (name === "cad_section") {
+          try {
+            const image = await sectionImage(endpoint, data, signal);
+            return {...output, content: [...output.content, image], details: {revision: data.revision, section_id: data.section_id}};
+          } catch (error) {
+            signal?.throwIfAborted();
+            return {...output, content: [...output.content, {type: "text", text: `Section computed, but image delivery failed: ${error}. Retry the identical request to fetch the cached section.`}]};
+          }
+        }
         const candidate = ["cad_build", "cad_parameters"].includes(name)
           ? data
           : name === "cad_inspect" &&
@@ -393,6 +404,19 @@ export default function (pi: ExtensionAPI) {
       },
     });
   }
+  tool(
+    "cad_section",
+    "Create a full material cross-section of an immutable STEP revision; no design/working-state change. Axis x/y/z selects the UNTILTED normal; offset (mm) sets the origin along that axis. tilt=[U,V] degrees: rotate about initial U, then rotated V (right-hand rule). Base frames: X→U=Y,V=Z; Y→U=-X,V=Z; Z→U=X,V=Y. Optional output-part names from cad_tree. Returns exact areas, plane basis, PNG image and SVG/DXF/JSON downloads, retaining holes and disconnected regions. Repeated requests use a bounded derived cache. Mesh-only revisions explicitly unsupported. Busy worker returns 429; retry unchanged. Not a strength/printability check.",
+    Type.Object({
+      revision,
+      axis: Type.Optional(StringEnum(["x", "y", "z"])),
+      offset: Type.Optional(Type.Number({minimum: -10000, maximum: 10000})),
+      tilt: Type.Optional(Type.Array(Type.Number({minimum:-180, maximum:180}), {minItems:2, maxItems:2})),
+      parts: Type.Optional(Type.Array(Type.String({minLength:1, maxLength:100}), {minItems:1, maxItems:32})),
+      deflection: Type.Optional(Type.Number({minimum:0.005, maximum:0.5, description:"PNG/SVG/JSON curve sampling tolerance in mm (default 0.02); exact area/DXF unaffected"})),
+    }),
+    async ({revision: id, ...parameters}, signal) => request(`/api/revisions/${id}/sections`, parameters, signal, 60000),
+  );
   tool(
     "cad_capabilities",
     "Read live service limits, supported operations and modeling/deployment boundaries. Use before proposing a change; JSON schema alone does not contain every runtime constraint.",

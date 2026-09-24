@@ -133,6 +133,20 @@ def artifact(revision: str, filename: str, request: Request):
     }
     if filename not in allowed:
         raise HTTPException(404)
+    return download_response(revision, filename, request, f"/api/revisions/{revision}/artifacts/{filename}")
+
+
+@app.api_route("/downloads/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"])
+def section_download(revision: str, section_id: str, filename: str, request: Request):
+    from cad.sections import FILES
+
+    published(revision)
+    if not re.fullmatch(r"[a-f0-9]{64}", section_id) or filename not in FILES:
+        raise HTTPException(404)
+    return download_response(revision, filename, request, f"/api/revisions/{revision}/sections/{section_id}/{filename}")
+
+
+def download_response(revision, filename, request, path):
     # Preserve standard download semantics (HEAD, byte ranges and validators).
     # Do not forward arbitrary browser headers or expose other upstream routes.
     forwarded = {
@@ -141,7 +155,7 @@ def artifact(revision: str, filename: str, request: Request):
         if request.method == "GET" and name in request.headers
     }
     req = urllib.request.Request(
-        ORIGIN + prefix() + f"/api/revisions/{revision}/artifacts/{filename}",
+        ORIGIN + prefix() + path,
         method=request.method,
         headers=forwarded,
     )
@@ -189,6 +203,7 @@ def artifact(revision: str, filename: str, request: Request):
         "review-top.png",
         "review-front.png",
         "review-exploded.png",
+        "section.png",
     }:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return Response(data, status_code=status, headers=headers)

@@ -17,7 +17,17 @@ CASTING_BOX_LIMITS = {
 def capabilities():
     return {
         "schema_version": 1,
-        "tool_contract_version": 5,
+        "tool_contract_version": 6,
+        "sections": {
+            "tool": "cad_section",
+            "basis": "Exact immutable STEP only; no silent mesh fallback",
+            "axis": ["x", "y", "z"],
+            "offset_mm": [-10000, 10000],
+            "tilt_degrees": "[initial U, rotated V], each -180..180; right-hand rule; offset on untilted axis",
+            "outputs": ["png", "svg", "dxf", "json"],
+            "limits": {"worker_seconds": 50, "sections_per_revision": 64, "project_cache_MiB": 256},
+            "mutation": "Derived inspection cache only; no build, commit, restore or publication",
+        },
         "declarative_limits": {"features": 100, "profile_points": 100, "boolean_inputs": 32},
         "extrusion": {
             "recommended": "extrude_z: positive height along local +Z, independent of winding; placement applied afterwards",

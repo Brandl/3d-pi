@@ -35,6 +35,12 @@ def gateway(tmp_path, monkeypatch):
         assert filename == "casting-box.zip"
         return FileResponse(file, filename=filename)
 
+    @upstream_app.api_route("/api/revisions/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"])
+    def section_download(revision: str, section_id: str, filename: str):
+        assert revision == REVISION and section_id == "c" * 64
+        assert filename == "section.dxf"
+        return FileResponse(file, filename=filename)
+
     origin = TestClient(upstream_app)
 
     def metadata(path):
@@ -112,6 +118,18 @@ def test_download_head_ranges_and_filename(gateway, path):
     assert invalid.status_code == 416
     if path.endswith("latest.zip"):
         assert head.headers["cache-control"] == "no-store"
+
+
+def test_section_download_auth_ranges_and_whitelist(gateway):
+    client, payload = gateway
+    path = f"/downloads/{REVISION}/sections/{'c' * 64}/section.dxf"
+    assert client.get(path).content == payload
+    assert client.head(path).content == b""
+    assert client.get(path, headers={"Range": "bytes=0-7"}).status_code == 206
+    assert client.get(path.replace("section.dxf", "input.json")).status_code == 404
+    assert client.get(path.replace(REVISION, "b" * 32)).status_code == 404
+    client.cookies.clear()
+    assert client.get(path, follow_redirects=False).status_code in (401, 303)
 
 
 def test_only_published_exports_and_no_mutation(gateway):

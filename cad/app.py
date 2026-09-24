@@ -16,6 +16,7 @@ from pydantic import Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from cad.schema import Document, Strict
+from cad.sections import SectionRequest
 from cad.storage import Conflict, Missing
 from cad.projects import Catalog, ProjectScope, project_id, prefix
 
@@ -130,6 +131,9 @@ def create_app(data_dir: Path | None = None):
             raise RuntimeError("Another CAD service is using this data directory")
         for project_store in store.all_stores():
             project_store.recover()
+            from cad.section_service import recover_pending
+
+            recover_pending(project_store)
         try:
             yield
         finally:
@@ -304,6 +308,28 @@ def create_app(data_dir: Path | None = None):
         tasks.pop(revision, None)
         notify()
         return store.get(revision)
+
+    @app.post("/api/revisions/{revision}/sections")
+    async def create_section(revision: str, request: SectionRequest):
+        from cad.section_service import generate
+        from cad.sections import FILES
+
+        result = await generate(store, revision, request, semaphore)
+        result["files"] = {
+            name.rsplit(".", 1)[1]: prefix() + f"/downloads/{revision}/sections/{result['section_id']}/{name}"
+            for name in sorted(FILES)
+        }
+        return result
+
+    @app.api_route("/api/revisions/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"])
+    @app.api_route("/downloads/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"])
+    def section_artifact(revision: str, section_id: str, filename: str):
+        from cad.section_service import section_file
+
+        path = section_file(store, revision, section_id, filename)
+        return FileResponse(path, filename=filename,
+                            content_disposition_type="inline" if filename.endswith(".png") else "attachment",
+                            headers={"X-CAD-Revision": revision, "X-Content-Type-Options": "nosniff"})
 
     @app.post("/api/revisions/{revision}/{operation}")
     async def publish(

@@ -1,6 +1,6 @@
 # CAD agent tools
 
-The web pi agent has 17 custom CAD tools, plus its regular container-local coding tools. These do not grant deployment access. Geometry remains declarative, builds remain bounded and publication remains explicit.
+The web pi agent has 18 custom CAD tools, plus its regular container-local coding tools. These do not grant deployment access. Geometry remains declarative, builds remain bounded and publication remains explicit.
 
 ## Read and navigate
 
@@ -28,6 +28,7 @@ The browser uses the same `/api/revisions/{revision}/tree` and `/components/{id}
 | `cad_cancel` | Explicit revision. Cancels queued/running work; finished work is reported without changes. It never rolls back a publication. |
 | `cad_measure` | Whole-part measurements and assembly dimensions; optional part filter. Retains measurement basis. Analytic masters use validated mesh measurements, not exact B-reps. Part volume is not automatically plaster-cavity volume. |
 | `cad_validate` | Summary by default; sections `checks`, `mesh`, `exports`, `assembly`, `all`. Explicit coverage distinguishes `passed`, `failed`, `not_checked`, and legacy metric-only `reported` (no invented verdict). A missing section has `valid: null`, never inherits geometry validity. Summary `valid` is retained for compatibility and applies ONLY to geometry/declared assertions; `geometry_valid` and `valid_scope` make this explicit. No printability/strength certification. |
+| `cad_section` | Full material section of immutable STEP geometry, with axis/offset/two tilt angles and optional selected parts. Exact areas, preserved holes/disconnected regions, inline PNG and SVG/DXF/JSON downloads. Derived inspection only; no model mutation. [Plane convention and limits](sections.md). |
 | `cad_render` | Actual revision-bound images sent to the model. Defaults to `view=review` (iso/top/front plus optional exploded); single views and inspection/standard styles are available. See [automatic visual checkpoints](visual-review.md). |
 
 If submission is uncertain, the error contains its request key: inspect history or retry identical input with that key. If a known candidate is still running after the wait budget, poll it instead of submitting another. A polling/network failure does not silently cancel a candidate. Explicit agent abort requests cancellation when the candidate ID is known; inspect state afterward because cancellation may race with completion.
@@ -52,4 +53,4 @@ Use `extrude_z` for NEW XY profiles when positive height must mean local +Z rega
 
 `tests/test_kernel_regressions.py` covers disconnected multi-operand Booleans, empty intermediates, explicit direction and legacy winding. `node --test scripts/cad-presentation.test.mjs` tests bounded navigation and honest validation coverage. The real loader test also simulates 150 large attachment notes and checks private-file fallback.
 
-`tests/test_introspection.py` checks stable unique IDs, valid relationships, generic dependencies, shared parameters, missing measurements, API lookup and published-only gateway access. `scripts/test-pi.mjs` loads the actual pi extension and exercises all 17 tools, including idempotent submission, history pages, early cancellation and no-op cancellation of completed work. Run that script against an **isolated** data directory/port: it intentionally builds, publishes and restores test models. Never run it against live project data. Browser tests check that the tree follows an immutable revision and stale component responses cannot overwrite newer selections.
+`tests/test_introspection.py` checks stable unique IDs, valid relationships, generic dependencies, shared parameters, missing measurements, API lookup and published-only gateway access. `scripts/test-pi.mjs` loads the actual pi extension and exercises all 18 tools, including idempotent submission, history pages, early cancellation and no-op cancellation of completed work. Run that script against an **isolated** data directory/port: it intentionally builds, publishes and restores test models. Never run it against live project data. Browser tests check that the tree follows an immutable revision and stale component responses cannot overwrite newer selections.
