@@ -352,7 +352,7 @@ function createModel(preview: Preview) {
 }
 function details(row: Revision) {
   const named=latest?.workspace?.commits.find(c=>c.revision===row.id);
-  const related=latest?.workspace?.assets.find(a=>a.revision===row.id);
+  const related=latest?.workspace?.assets.slice().reverse().find(a=>a.revision===row.id);
   $("title").textContent = related?.name ?? named?.name ?? row.document.name;
   $("title").title=row.document.name;
   $('view-title').textContent=related?.name??named?.name??row.document.name;

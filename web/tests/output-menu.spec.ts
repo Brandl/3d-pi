@@ -1,0 +1,32 @@
+import {test,expect} from '@playwright/test';
+
+for(const width of [1440,320])for(const role of ['test','print','inspection'])test(`linked ${role} stays selectable after switching away at ${width}px`,async({page,request})=>{
+ await page.setViewportSize({width,height:900});
+ const source=await(await request.get('/api/state')).json();
+ const a=source.workspace?.revision??source.revision;
+ if(!a)throw Error('Run with an isolated seeded CAD fixture');
+ const b='b'.repeat(32),commit='1'.repeat(32);
+ const row=await(await request.get(`/api/revisions/${a}`)).json();
+ const preview=await(await request.get(`/api/revisions/${a}/artifacts/preview.json`)).json();
+ await page.route(`**/api/revisions/${b}`,r=>r.fulfill({json:{...row,id:b,document:{...row.document,name:'Output geometry'}}}));
+ await page.route(`**/api/revisions/${b}/artifacts/preview.json`,r=>r.fulfill({json:preview}));
+ const original={id:'original',commit_id:commit,revision:b,role,name:'Original output',note:'Earlier instructions'};
+ const state={...source,event_sequence:0,intermediates:[],generation:0,revision:null,publications:[],history:[],candidates:[],workspace:{generation:1,revision:a,commit_id:commit,commits:[{id:commit,generation:1,revision:a,name:'Assembly design',icon:'□',created:1,source_commit:'a'.repeat(40),source_file:'document.json'}],assets:[original,{...original,id:'corrected',name:'Final output',note:'Corrected instructions'}]}};
+ await page.route('**/api/state',r=>r.fulfill({json:state}));
+ await page.routeWebSocket('**/api/events',ws=>ws.send(JSON.stringify(state)));
+ const writes:string[]=[];page.on('request',r=>{if(['POST','PUT','PATCH','DELETE'].includes(r.method()))writes.push(r.url());});
+ await page.goto('/?candidate='+b);
+ const select=page.locator('#representation');
+ await expect(page.locator('#viewport')).toHaveAttribute('data-revision',b);
+ await expect(page.locator('#view-title')).toHaveText('Final output');
+ await expect(select.locator(`option[value="${b}"]`)).toHaveCount(1);
+ await select.selectOption(a);
+ await expect(page.locator('#viewport')).toHaveAttribute('data-revision',a);
+ await expect(select.locator(`option[value="${b}"]`)).toHaveText('Final output');
+ await select.selectOption(b);
+ await expect(page.locator('#viewport')).toHaveAttribute('data-revision',b);
+ await page.reload();await expect(select).toHaveValue(b);
+ await select.selectOption(a);await select.selectOption(b);
+ await expect(page.locator('#viewport')).toHaveAttribute('data-working-revision',a);
+ expect(writes).toEqual([]);
+});

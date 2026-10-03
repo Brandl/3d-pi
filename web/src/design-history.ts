@@ -39,7 +39,7 @@ export function createHistory(changed:()=>void){
   const legacy=(state.publications??[]).slice().sort((a,b)=>a.generation-b.generation).map(p=>({key:'p:'+p.generation,revision:p.revision,name:p.name??`Version ${p.generation}`,icon:'◷',detail:`Legacy ${p.operation} · v${p.generation} · ${p.revision}`}));
   entries=[...legacy,...(workspace?.commits??[]).map(c=>({key:'c:'+c.id,revision:c.revision,name:c.name,icon:c.icon,detail:`${c.name}\nGit ${c.source_commit}\n${c.source_file}\nCAD ${c.revision}`,commit:c.id}))];
   let selected=commit?entries.find(e=>e.commit===commit):version?entries.find(e=>e.key==='p:'+version):undefined;
-  const asset=workspace?.assets.find(a=>a.revision===candidate);
+  const asset=workspace?.assets.slice().reverse().find(a=>a.revision===candidate);
   if(asset)selected=entries.find(e=>e.commit===asset.commit_id);
   const allowed=new Set([...(state.candidates??[]),...entries.map(e=>e.revision),...(workspace?.assets??[]).map(a=>a.revision)]);
   const invalid=Boolean(candidate&&!allowed.has(candidate)||commit&&!selected||version&&!selected);
@@ -60,7 +60,12 @@ export function createHistory(changed:()=>void){
   $('timeline-status').textContent=invalid?'Requested view unavailable · working design unchanged':asset?`${asset.name} · ${asset.role==='inspection'?'inspection':'output'} · working design unchanged`:candidate&&candidate!==working?'Build preview · not the working design':selected?`${selected.name} · browsing only` :working?'Working design':'No working design · ask π to commit a model';
   const viewport=$('viewport');viewport.dataset.workingRevision=working??'';viewport.dataset.workspaceGeneration=String(workspace?.generation??0);viewport.dataset.designCommit=workspace?.commit_id??'';
   const select=$('draft-select') as HTMLSelectElement;select.replaceChildren(new Option('Working design',''));for(const id of state.candidates??[]){select.add(new Option(state.candidate_names?.[id]??id.slice(0,8),id));}select.value=candidate??'';
-  const views=$('representation') as HTMLSelectElement;const assembly=selected?.revision??working;views.replaceChildren(new Option('Assembly',assembly??''));for(const a of related.filter(a=>a.role==='inspection'))views.add(new Option(a.name,a.revision));if(viewed&&!Array.from(views.options).some(o=>o.value===viewed))views.add(new Option(asset?.name??'Build preview',viewed));views.value=viewed??'';views.disabled=!viewed;
+  const views=$('representation') as HTMLSelectElement;const assembly=selected?.revision??working;views.replaceChildren(new Option('Assembly',assembly??''));
+  // Keep every related output selectable after leaving it. A revision may have
+  // multiple attachment records (e.g. corrected instructions); use the latest label.
+  const relatedViews=new Map(related.map(a=>[a.revision,a]));
+  for(const a of relatedViews.values())if(a.revision!==assembly)views.add(new Option(a.name,a.revision));
+  if(viewed&&!Array.from(views.options).some(o=>o.value===viewed))views.add(new Option(asset?.name??'Build preview',viewed));views.value=viewed??'';views.disabled=!viewed;
   void files(related,owner);
   return viewed??null;
  };
