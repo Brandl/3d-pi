@@ -35,7 +35,9 @@ def gateway(tmp_path, monkeypatch):
         assert filename == "casting-box.zip"
         return FileResponse(file, filename=filename)
 
-    @upstream_app.api_route("/api/revisions/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"])
+    @upstream_app.api_route(
+        "/api/revisions/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"]
+    )
     def section_download(revision: str, section_id: str, filename: str):
         assert revision == REVISION and section_id == "c" * 64
         assert filename == "section.dxf"

@@ -18,6 +18,7 @@ Angle = Annotated[float, Field(ge=-180, le=180, allow_inf_nan=False)]
 
 
 class SectionRequest(Strict):
+    representation: Literal["step", "mesh"] = "step"
     axis: Literal["x", "y", "z"] = "z"
     offset: float = Field(default=0, ge=-10000, le=10000, allow_inf_nan=False)
     tilt: tuple[Angle, Angle] = (0, 0)
@@ -28,7 +29,7 @@ class SectionRequest(Strict):
 
 
 FILES = {"section.png", "section.svg", "section.dxf", "section.json"}
-VERSION = 1
+VERSION = 2
 MAX_POINTS = 100000
 
 
@@ -178,6 +179,7 @@ def make_section(parts, request: SectionRequest, destination: Path, revision: st
         "module_version": VERSION,
         "parameters": request.model_dump(mode="json"),
         "plane": axes,
+        "representation": "step",
         "basis": "Exact STEP B-rep intersection; exact kernel areas/perimeters; sampled PNG/SVG/JSON outlines",
         "units": "mm",
         "parts": summaries,
@@ -256,7 +258,11 @@ def draw_section(regions, summary, destination):
     fig.text(
         0.02,
         0.025,
-        "Exact STEP section · hatched material / empty holes · sampled outlines · independent parts (overlap not unioned)",
+        (
+            "APPROXIMATE MESH section · polygon outlines · not exact analytic geometry"
+            if summary.get("representation") == "mesh"
+            else "Exact STEP section · hatched material / empty holes · sampled outlines · independent parts (overlap not unioned)"
+        ),
         fontsize=8,
     )
     fig.tight_layout(rect=(0, 0.05, 1, 1))
@@ -276,10 +282,16 @@ def main():
     destination = Path(sys.argv[1])
     try:
         job = json.loads((destination / "input.json").read_text())
-        parts = load_parts(Path(job["step"]), job["measurements"])
-        make_section(
-            parts, SectionRequest.model_validate(job["parameters"]), destination, job["revision"]
-        )
+        request = SectionRequest.model_validate(job["parameters"])
+        if request.representation == "mesh":
+            from cad.mesh_sections import make_mesh_section
+
+            make_mesh_section(
+                Path(job["preview"]), job["measurements"], request, destination, job["revision"]
+            )
+        else:
+            parts = load_parts(Path(job["step"]), job["measurements"])
+            make_section(parts, request, destination, job["revision"])
     except Exception as exc:
         (destination / "error.json").write_text(json.dumps({"error": str(exc)[:2000]}))
         sys.exit(1)

@@ -5,6 +5,9 @@ import {pipeline} from 'node:stream/promises';
 import {createHash, timingSafeEqual} from 'node:crypto';
 import {mkdirSync, existsSync, readFileSync, writeFileSync, createReadStream, lstatSync, symlinkSync, renameSync} from 'node:fs';
 import {join} from 'node:path';
+import {providerAuthStatus} from './provider-status.mjs';
+// Check before any project worker starts. Refresh metadata on each state read.
+let providerAuth=providerAuthStatus();
 
 const root=process.env.PI_PROJECTS_DIR ?? '/projects';
 const origin=process.env.CAD_URL ?? 'http://127.0.0.1:8765';
@@ -60,8 +63,8 @@ async function ensure(project) {
  await stop();
  const path=folder(project);
  worker=spawn(process.execPath,[process.env.PI_WORKER_PATH??'/opt/agent/main.mjs'],{stdio:'inherit',env:{...process.env,
-  PI_WORKSPACE:join(path,'source'), PI_STATE_DIR:join(path,'pi'), PI_AUTH_DIR:'/agent-state/pi',
-  PI_MODELS_STORE:'/agent-state/models-store.json', PI_WEB_PORT:String(workerPort), PI_PROJECT_ID:project.id,
+  PI_WORKSPACE:join(path,'source'), PI_STATE_DIR:join(path,'pi'), PI_AUTH_DIR:process.env.PI_AUTH_DIR??join(process.env.PI_STATE_DIR??'/agent-state','pi'),
+  PI_MODELS_STORE:process.env.PI_MODELS_STORE??join(process.env.PI_STATE_DIR??'/agent-state','models-store.json'), PI_WEB_PORT:String(workerPort), PI_PROJECT_ID:project.id,
   CAD_URL:origin+'/projects/'+project.id}});
  selected=project.id;
  for(let i=0;i<100;i++){
@@ -110,12 +113,15 @@ const server=http.createServer(async(req,res)=>{
     const cached=join(path,'pi','web-state.json');
     const state=existsSync(cached)?JSON.parse(readFileSync(cached,'utf8')):{sessionId:null,model:`${process.env.PI_PROVIDER??'openai-codex'}/${process.env.PI_MODEL??'gpt-6-astra'}`,busy:false,sequence:0,messages:[],partial:null,activeTools:[],error:'',job:null};
     if(state.job?.status==='running'){state.job.status='interrupted';state.error='Previous turn interrupted; inspect the design before retrying.';}
-    return reply(res,200,state);
+    providerAuth=providerAuthStatus();
+    return reply(res,200,{...state,providerAuth});
    }
    if(operation==='abort' && selected!==id)return reply(res,409,{detail:'No active turn in this project'});
    if(!await ensure(project))return reply(res,409,{detail:`Pi is working in project ${selected}. Return there to stop it, or wait.`});
    const r=await fetch(workerOrigin+'/'+operation,{method:req.method,headers,body,signal:AbortSignal.timeout(12000)});
-   reply(res,r.status,await r.json());
+   const response=await r.json();
+   if(operation==='state'&&r.ok){providerAuth=providerAuthStatus();response.providerAuth=providerAuth;}
+   reply(res,r.status,response);
   };
   const pending=tail.then(run);tail=pending.catch(()=>{});await pending;
  }catch{if(!res.headersSent)reply(res,503,{detail:'Project agent unavailable; inspect service status before retrying'});else res.destroy();}

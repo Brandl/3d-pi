@@ -55,7 +55,7 @@ class Feature(Strict):
     )
     radius: Scalar | None = None
     height: Scalar | None = None
-    points: Annotated[list[tuple[Scalar, Scalar]], Field(min_length=3, max_length=100)] | None = (
+    points: Annotated[list[tuple[Scalar, Scalar]], Field(min_length=3, max_length=512)] | None = (
         None
     )
     inputs: Annotated[list[Name], Field(max_length=32)] = []
@@ -173,6 +173,8 @@ class Document(Strict):
     def references(self):
         if len(self.parameters) > 64:
             raise ValueError("At most 64 parameters")
+        if sum(len(f.points or []) for f in self.features) > 2048:
+            raise ValueError("At most 2048 total profile points per document")
         known = set()
         for f in self.features:
             if f.name in known:

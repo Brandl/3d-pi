@@ -1,0 +1,13 @@
+# Source snapshots omit installation records and archived prototypes.
+# This affects git archive only; it does NOT sanitize Git history or pushes.
+/examples export-ignore
+/design export-ignore
+/milestones.md export-ignore
+/todo.md export-ignore
+/docs/workspace-plan.md export-ignore
+/docs/open-source-readiness.md export-ignore
+/designs export-ignore
+/docs/trilock-agent-audit.md export-ignore
+/docs/release-file-review.md export-ignore
+/docs/release-file-inventory.tsv export-ignore
+/scripts/migrate-project-folders.py export-ignore

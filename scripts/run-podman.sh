@@ -26,6 +26,7 @@ podman run -d "${common[@]}" --name "$pod-agent" --memory=2g --memory-swap=2g --
   -v "$runtime/projects:/projects:rw" \
   -v "$runtime/secrets/agent-token:/run/secrets/agent-token:ro" \
   -e CAD_AGENT_TOKEN_FILE=/run/secrets/agent-token \
+  -e "PI_CONTAINER_NAME=$pod-agent" \
   -e "PI_PROVIDER=${PI_PROVIDER:-openai-codex}" -e "PI_MODEL=${PI_MODEL:-gpt-6-astra}" \
   --health-cmd "node /opt/agent/health.mjs" --health-interval=30s --health-start-period=30s \
   "${seed[@]}" localhost/3d-pi-agent:workspace

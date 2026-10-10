@@ -47,13 +47,16 @@ async def generate(store, revision, parameters, semaphore):
     if row["status"] != "ready":
         raise HTTPException(409, "Section requires a ready immutable revision")
     step = row["result"]["exports"].get("step")
-    if not step:
-        raise HTTPException(
-            422,
-            "Exact sections require a STEP export. Mesh-only models are unsupported; no silent mesh approximation.",
-        )
-    if Path(step).name != step:
-        raise HTTPException(422, "Invalid STEP export path")
+    if parameters.representation == "step":
+        if not step:
+            raise HTTPException(
+                422,
+                "Exact sections require a STEP export. Explicitly request representation=mesh for an approximate assembly-mesh section; no silent fallback.",
+            )
+        if Path(step).name != step:
+            raise HTTPException(422, "Invalid STEP export path")
+    elif not (store.directory(revision) / "preview.json").is_file():
+        raise HTTPException(422, "Immutable assembly mesh unavailable")
     parameters = parameters.model_copy(
         update={"parts": sorted(set(parameters.parts)) if parameters.parts else None}
     )
@@ -95,7 +98,8 @@ async def generate(store, revision, parameters, semaphore):
                 json.dumps(
                     {
                         **payload,
-                        "step": str(store.directory(revision) / step),
+                        "step": str(store.directory(revision) / step) if step else None,
+                        "preview": str(store.directory(revision) / "preview.json"),
                         "measurements": row["result"]["report"]["parts"],
                     }
                 )

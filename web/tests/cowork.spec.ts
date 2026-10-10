@@ -12,7 +12,7 @@ for(const fallback of [false,true]) test(`working design, timeline, files and se
  await page.route('**/api/agent/state',r=>r.fulfill({json:{messages:[],partial:null,busy:false,activeTools:[],job:{status:'complete'},model:'test',error:''}}));
  let prompt='';
  await page.route('**/api/agent/prompt',r=>{prompt=r.request().postDataJSON().text;return r.fulfill({status:202,json:{status:'accepted'}});});
- await page.goto('/?project=dripper');
+ await page.goto('/?project=dripper&view=working');
  const viewport=page.locator('#viewport');
  await expect(viewport).toHaveAttribute('data-revision',workspace.revision);
  await expect(page.locator('#history')).toContainText(workspace.commits[0].icon);
@@ -49,7 +49,7 @@ for(const fallback of [false,true]) test(`working design, timeline, files and se
  expect(errors).toEqual([]);
 });
 
-test('a newer build does not become a working model in an empty workspace',async({page})=>{
+test('an unverified candidate is not auto-previewed in an empty workspace',async({page})=>{
  test.skip(process.env.CAD_COWORK_TESTS!=='1','Isolated only');
  await page.route('**/api/state',r=>r.fulfill({json:{revision:null,generation:0,publications:[],history:[],candidates:['a'.repeat(32)],workspace:{revision:null,commit_id:null,generation:0,commits:[],assets:[]}}}));
  await page.addInitScript(()=>Object.defineProperty(window,'WebSocket',{value:class{constructor(){throw Error('Polling test');}}}));

@@ -1,5 +1,5 @@
 import {projectPath} from './project-path';
-import {createHistory, type Workspace} from './design-history';
+import {createHistory, type Workspace, type Intermediary} from './design-history';
 import './projects';
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -29,9 +29,11 @@ type Publication = {
   name?: string | null;
 };
 type State = {
+  event_sequence?: number | null;
   revision: string | null;
   generation: number;
-  history: { id: string; status: string }[];
+  history: { id: string; status: string; valid?: boolean | null }[];
+  intermediates?: Intermediary[];
   publications?: Publication[];
   candidates?: string[];
   candidate_names?: Record<string,string>;
@@ -350,13 +352,21 @@ function createModel(preview: Preview) {
   }
   return group;
 }
-function details(row: Revision) {
-  const named=latest?.workspace?.commits.find(c=>c.revision===row.id);
-  const related=latest?.workspace?.assets.slice().reverse().find(a=>a.revision===row.id);
+function viewHeading(row: Revision) {
+  const params=new URL(location.href).searchParams;
+  const pinned=params.get('commit');
+  const commits=latest?.workspace?.commits??[];
+  const named=commits.find(c=>c.id===pinned&&c.revision===row.id)??[...commits].reverse().find(c=>c.revision===row.id);
+  const related=params.get('candidate')===row.id?latest?.workspace?.assets.slice().reverse().find(a=>a.revision===row.id):undefined;
+  const historical=Boolean(pinned&&pinned!==latest?.workspace?.commit_id||params.get('version'));
   $("title").textContent = related?.name ?? named?.name ?? row.document.name;
   $("title").title=row.document.name;
   $('view-title').textContent=related?.name??named?.name??row.document.name;
-  $('view-basis').textContent=related?'Inspection output · browsing only':row.id===(latest?.workspace?.revision??latest?.revision)?'Working design · geometry preview':'History preview · working design unchanged';
+  const intermediary=latest?.intermediates?.some(i=>i.revision===row.id);
+  $('view-basis').textContent=intermediary?'Intermediary state · not committed':related?'Related output · browsing only':!historical&&row.id===(latest?.workspace?.revision??latest?.revision)?'Working design · geometry preview':'History preview · working design unchanged';
+}
+function details(row: Revision) {
+  viewHeading(row);
   const facts=$('view-facts');facts.replaceChildren();
   const parts=Object.values(row.result.report.parts);
   const values=[`${parts.length} parts`];
@@ -435,35 +445,38 @@ function details(row: Revision) {
 }
 let desired: string | null = null;
 let loaded: string | null = null;
+let loadedRow: Revision | null = null;
 let loading: string | null = null;
 let generation = -1;
 let latest: State;
 let loadError = "";
 let workspaceGeneration = -1;
+let eventSequence = -1;
 const renderTimeline = createHistory(()=>{loadError='';if(latest)void update(latest);});
+function renderNotice(){
+  const building=latest.history.filter(row=>['queued','building'].includes(row.status));
+  const newest=latest.history[0];
+  const failed=newest?.status==='failed'||newest?.status==='ready'&&newest.valid===false;
+  $('notice').textContent=loadError||(building.length?`${building.length} build(s) in progress · showing last good preview; saved design unchanged`:failed?'Build or checks failed · keeping last good preview; saved design unchanged':'');
+}
 async function update(state: State) {
-  if (state.generation < generation || (state.workspace?.generation??0) < workspaceGeneration) return;
+  if (state.generation < generation || (state.workspace?.generation??0) < workspaceGeneration || (state.event_sequence!=null&&state.event_sequence<eventSequence)) return;
+  if(state.event_sequence!=null)eventSequence=state.event_sequence;
   latest = state;
   generation = state.generation;
   workspaceGeneration = state.workspace?.generation??0;
   desired = renderTimeline(state);
-  const building = state.history.filter((row) =>
-    ["queued", "building"].includes(row.status),
-  );
-  const failed = state.history[0]?.status === "failed";
-  $("notice").textContent =
-    loadError ||
-    (building.length
-      ? `${building.length} build(s) in progress · working design unchanged`
-      : failed
-        ? "Build failed. Working design unchanged."
-        : "");
+  renderNotice();
   if (!desired) {
+    loadedRow=null;
     if (loaded) {scene.remove(model);dispose(model);model=new THREE.Group();scene.add(model);loaded=null;delete viewport.dataset.revision;delete viewport.dataset.part;}
     $('empty').hidden=false;fallbackImage.hidden=true;$('title').textContent='No working design';$('revision').textContent='';$('geometry-status').textContent='';
     return;
   }
-  if (desired === loaded || desired === loading) return;
+  // A commit or attachment can change the visible metadata of the already-loaded
+  // candidate. Refresh the heading without rebuilding geometry or resetting camera.
+  if (desired === loaded) {if(loadedRow)viewHeading(loadedRow);return;}
+  if (desired === loading) return;
   const id = desired;
   loading = id;
   try {
@@ -486,6 +499,7 @@ async function update(state: State) {
     layoutModel();
     view(first?'iso':currentView);
     loaded = id;
+    loadedRow = row;
     loadError = "";
     details(row);
     $("empty").hidden = true;
@@ -503,11 +517,7 @@ async function update(state: State) {
     if (desired === id) loadError = `Unable to load preview; keeping last good model. ${String(error)}`;
   } finally {
     if (loading === id) loading = null;
-    $("notice").textContent =
-      loadError ||
-      (latest.history.some((r) => ["queued", "building"].includes(r.status))
-        ? "Build in progress · working design unchanged"
-        : "");
+    renderNotice();
   }
 }
 let retry = 500;

@@ -1,7 +1,7 @@
 name: Test
 on: [push, pull_request]
 jobs:
-  local-mvp:
+  alpha-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,10 +15,10 @@ jobs:
             agent/package-lock.json
       - run: uv sync --locked
       - run: uv run ruff check cad tests && uv run ruff format --check cad tests
-      - run: uv run pytest -q
+      - run: uv run pytest -q -rs
         env:
           OPENBLAS_NUM_THREADS: '1'
-      - run: node --test scripts/cad-presentation.test.mjs
+      - run: node --test scripts/cad-presentation.test.mjs scripts/section-profile.test.mjs
       - run: npm ci --ignore-scripts && npm test
         working-directory: agent
       - run: npm ci && npm run build && npx playwright install --with-deps chromium

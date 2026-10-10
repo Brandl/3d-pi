@@ -1,4 +1,4 @@
-from pathlib import Path
+from local_examples import load_local_example
 
 import numpy as np
 import pytest
@@ -9,9 +9,7 @@ from cad.solid_master import dimensions, sample, tip_surface
 
 
 def document():
-    doc = Document.model_validate_json(
-        Path("examples/gentle-twist-chamfered-form.json").read_text(encoding="utf-8")
-    )
+    doc = Document.model_validate(load_local_example("gentle-twist-chamfered-form"))
     doc.solid_master.tip_extension = 5.0
     return doc
 

@@ -1,6 +1,6 @@
 import json
 import zipfile
-from pathlib import Path
+from local_examples import load_local_example
 
 import build123d as b
 import numpy as np
@@ -14,9 +14,7 @@ from cad.schema import Document
 
 @pytest.fixture(scope="module")
 def document():
-    return Document.model_validate_json(
-        Path("examples/gentle-twist-casting-box.json").read_text(encoding="utf-8")
-    )
+    return Document.model_validate(load_local_example("gentle-twist-casting-box"))
 
 
 @pytest.fixture(scope="module")

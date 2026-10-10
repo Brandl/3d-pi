@@ -1,4 +1,4 @@
-from pathlib import Path
+from local_examples import load_local_example
 
 import numpy as np
 import pytest
@@ -9,9 +9,7 @@ from cad.solid_master import dimensions, sample, tip_surface
 
 
 def document():
-    doc = Document.model_validate_json(
-        Path("examples/gentle-twist-positive-lock-floor.json").read_text(encoding="utf-8")
-    )
+    doc = Document.model_validate(load_local_example("gentle-twist-positive-lock-floor"))
     doc.features[0].surface.profile = "origami"
     doc.parameters.update(
         flute_count=20.0, twist_degrees=0.0, bottom_radius=16.0, bottom_amplitude=16.0 * 4 / 60
@@ -45,9 +43,7 @@ def test_base_unchanged_closed_mesh_and_circular_neck():
     v, f, *_ = sample(s, p, 360, 128)
     _, report = validate_mesh(v, f, expected_euler=2)
     assert report["connected_components"] == 1 and report["self_intersecting_faces"] == 0
-    old = Document.model_validate_json(
-        Path("examples/gentle-twist-positive-lock-floor.json").read_text(encoding="utf-8")
-    )
+    old = Document.model_validate(load_local_example("gentle-twist-positive-lock-floor"))
     old_s = Surface.from_document(old)[0]
     old_p = dimensions(old, old_s)
     ov, of, *_ = sample(old_s, old_p, 360, 128)

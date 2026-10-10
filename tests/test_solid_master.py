@@ -1,5 +1,5 @@
 import math
-from pathlib import Path
+from local_examples import load_local_example
 
 import numpy as np
 import pytest
@@ -11,9 +11,7 @@ from cad.solid_master import dimensions, sample
 
 
 def document():
-    doc = Document.model_validate_json(
-        Path("examples/gentle-twist-round-casting-box.json").read_text(encoding="utf-8")
-    )
+    doc = Document.model_validate(load_local_example("gentle-twist-round-casting-box"))
     doc.solid_master = SolidMaster()
     return doc
 

@@ -64,3 +64,35 @@ def test_registered_old_output_named_download_and_scope(gateway, monkeypatch):
     client.cookies.clear()
     assert client.get(path, follow_redirects=False).status_code == 303
     assert client.get(f"/projects/dripper/api/revisions/{REVISION}").status_code == 401
+
+
+def test_live_previews_and_cursor_remain_project_scoped(gateway, monkeypatch):
+    client, _ = gateway
+    data = dict(
+        revision=None,
+        generation=0,
+        publications=[],
+        workspace=None,
+        history=[dict(id=REVISION, status="ready", name="Synthetic preview", valid=True)],
+        intermediates=[dict(revision=REVISION, name="Synthetic preview", created=1)],
+        event_sequence=123,
+    )
+    previous = preview.upstream
+    monkeypatch.setattr(
+        preview, "upstream", lambda path: data if path == "/api/state" else previous(path)
+    )
+    scoped = client.get("/projects/dripper/api/state").json()
+    assert scoped["intermediates"] == data["intermediates"]
+    assert scoped["event_sequence"] == 123 and scoped["history"][0]["valid"] is True
+    public = client.get("/api/state").json()
+    assert public["intermediates"] == [] and public["event_sequence"] == 0
+    assert public["history"] == []
+    data["history"] = []  # Last good preview can outlive the 100-build history window.
+    token = project_id.set("dripper")
+    try:
+        assert preview.published(REVISION)["result"]["exports"]
+    finally:
+        project_id.reset(token)
+    assert client.get(f"/api/revisions/{REVISION}").status_code == 404
+    client.cookies.clear()
+    assert client.get("/projects/dripper/api/state").status_code == 401

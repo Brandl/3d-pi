@@ -2,6 +2,8 @@
 name = "three-d-pi"
 version = "0.1.0"
 description = "Local agent-native parametric CAD service"
+license = "Apache-2.0"
+license-files = ["LICENSE", "LICENSES/*", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "build123d==0.11.1",
@@ -11,14 +13,16 @@ dependencies = [
   "matplotlib==3.11.2",
   "pymeshlab==2025.7.post1",
   "trimesh==4.6.8",
-  "python-multipart==0.0.22",
+  "networkx==3.4.2",
+  "python-multipart==0.0.31",
 ]
 
 [dependency-groups]
-dev = ["pytest==8.3.5", "httpx==0.28.1", "trimesh==4.6.8", "networkx==3.4.2", "lxml==5.4.0", "ruff==0.11.10"]
+dev = ["pytest==9.0.3", "httpx==0.28.1", "trimesh==4.6.8", "lxml==6.1.0", "ruff==0.11.10"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

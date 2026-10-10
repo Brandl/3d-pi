@@ -43,6 +43,26 @@ class Store:
             from cad.uploads import DDL as UPLOAD_DDL
 
             db.executescript(UPLOAD_DDL)
+            # Persistent cursor orders HTTP and websocket snapshots, including
+            # ready builds and attachments that do not change the saved generation.
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS live_sequence (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton=1), value INTEGER NOT NULL);
+                INSERT OR IGNORE INTO live_sequence VALUES (1, 0);
+            """)
+            for table, operation in (
+                ("revisions", "INSERT"),
+                ("revisions", "UPDATE"),
+                ("publications", "INSERT"),
+                ("state", "UPDATE"),
+                ("design_commits", "INSERT"),
+                ("design_state", "UPDATE"),
+                ("design_assets", "INSERT"),
+            ):
+                db.execute(f"""CREATE TRIGGER IF NOT EXISTS live_{table}_{operation}
+                    AFTER {operation} ON {table} BEGIN
+                    UPDATE live_sequence SET value=value+1 WHERE singleton=1;
+                    END""")
 
     @contextmanager
     def connection(self):
@@ -71,13 +91,19 @@ class Store:
 
     def state(self):
         with self.connection() as db:
+            # Keep head, history and derived live previews in one read snapshot.
+            db.execute("BEGIN")
             state = dict(db.execute("SELECT revision,generation FROM state").fetchone())
+            state["event_sequence"] = db.execute("SELECT value FROM live_sequence").fetchone()[0]
             state["history"] = [
                 dict(r)
                 for r in db.execute(
-                    "SELECT id,parent,base_generation,created,status,json_extract(document, '$.name') AS name FROM revisions ORDER BY created DESC LIMIT 100"
+                    "SELECT id,parent,base_generation,created,status,json_extract(document, '$.name') AS name,json_extract(result, '$.report.valid') AS valid FROM revisions ORDER BY created DESC LIMIT 100"
                 )
             ]
+            for build in state["history"]:
+                if build["valid"] is not None:
+                    build["valid"] = bool(build["valid"])
             state["publications"] = [
                 dict(r)
                 for r in db.execute("""SELECT p.*, json_extract(r.document, '$.name') AS name
@@ -99,6 +125,35 @@ class Store:
                 if r["status"] == "ready" and r["id"] not in registered
             ]
             state["candidate_names"] = {r["id"]: r["name"] for r in state["history"]}
+            # Live previews are derived, never new commits or publication events.
+            # Only ready geometry whose declared checks pass, built after the saved
+            # head, is eligible. Registered print/inspection assets are not drafts.
+            commits = state["workspace"]["commits"]
+            cutoff = (
+                commits[-1]["created"]
+                if commits
+                else (state["publications"][0]["created"] if state["publications"] else 0)
+            )
+            head = state["workspace"]["revision"] or state["revision"]
+            head_row = db.execute(
+                "SELECT content_hash FROM revisions WHERE id=?", (head,)
+            ).fetchone()
+            head_hash = head_row["content_hash"] if head_row else ""
+            eligible = db.execute(
+                """SELECT id AS revision, created, json_extract(document, '$.name') AS name
+                   FROM revisions WHERE status='ready' AND created>?
+                   AND json_extract(result, '$.report.valid')=1 AND content_hash!=?
+                   AND id NOT IN (
+                       SELECT revision FROM design_commits UNION SELECT revision FROM design_assets
+                       UNION SELECT revision FROM publications)
+                   ORDER BY created DESC, id DESC LIMIT 32""",
+                (cutoff, head_hash),
+            )
+            state["intermediates"] = list(reversed([dict(row) for row in eligible]))
+            for item in state["intermediates"]:
+                if item["revision"] not in state["candidates"]:
+                    state["candidates"].append(item["revision"])
+                state["candidate_names"][item["revision"]] = item["name"]
             return state
 
     def create(self, document, expected_generation, request_key):

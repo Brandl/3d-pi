@@ -10,7 +10,7 @@ test:
 	uv run ruff check cad tests
 	uv run ruff format --check cad tests
 	uv run pytest -q
-	node --test scripts/cad-presentation.test.mjs
+	node --test scripts/cad-presentation.test.mjs scripts/section-profile.test.mjs
 	cd web && npm run build
 viewer:
 	cd web && npm run dev

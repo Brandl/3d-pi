@@ -8,7 +8,7 @@ The web pi agent has 18 custom CAD tools, plus its regular container-local codin
 | --- | --- |
 | `cad_capabilities` | Live casting-box limits, cross-constraints, export caveats and service scope. Uses the same limit constants as validation. This is not an exhaustive list of geometric constraints. |
 | `cad_schema` | Complete document JSON schema, or `section=casting_box/solid_master/feature` with referenced definitions. Runtime limits must also be consulted. |
-| `cad_example` | Example enclosure source, not the current design. |
+| `cad_example` | Fresh built-in teaching enclosure/lid source, not the current design and not an excluded personal example file. |
 | `cad_inspect` | Compact working header (`current_commit`, counts; no full history/notes). `view=document` gives source; `view=diagnostics` gives result/failure details. `view=history` paginates `history_kind=publications/builds/commits/assets` with `offset/limit`; optional `commit` filters assets. Commits/assets are newest first, and asset lists omit instructions. `view=asset, asset_id=...` reads one attachment including its note. Build history remains limited to the latest 100 entries. |
 | `cad_tree` | Required immutable revision; optional node ID and maximum depth. Includes output parts, source-feature DAG references, integrated interfaces and mating relationships. |
 | `cad_component_inspect` | Required revision and exact node ID from the tree. Returns parameter expressions/resolved values, conservative consumers, linked relationships, instructions and available whole-part measurements. |
@@ -17,7 +17,7 @@ Tree IDs distinguish `part:wall_left`, `feature:...`, `interface:wall_left:front
 
 Generic feature dependencies come from the document DAG. Specialized generator interfaces are explicit metadata in `cad/introspection.py`. Their parameter references are conservatively collected from the generator source scope—not symbolic proof that every parameter changes every part. Missing measurements on failed/unbuilt candidates or logical interfaces are not represented as zeros.
 
-The browser uses the same `/api/revisions/{revision}/tree` and `/components/{id}` data as pi. The authenticated gateway admits only published revisions for these routes; pi's private API can inspect its unpublished candidates. Component lookup is read-only and does not publish, restore or select a server-global model.
+The browser uses the same `/api/revisions/{revision}/tree` and `/components/{id}` data as pi. The unscoped gateway admits published revisions. Authenticated project routes also admit registered outputs and eligible ready candidates/intermediaries; pi's private API can inspect failed/unpublished builds for diagnostics. Component lookup is read-only and does not publish, restore or select a server-global model.
 
 ## Build and inspect candidates
 
@@ -28,12 +28,13 @@ The browser uses the same `/api/revisions/{revision}/tree` and `/components/{id}
 | `cad_cancel` | Explicit revision. Cancels queued/running work; finished work is reported without changes. It never rolls back a publication. |
 | `cad_measure` | Whole-part measurements and assembly dimensions; optional part filter. Retains measurement basis. Analytic masters use validated mesh measurements, not exact B-reps. Part volume is not automatically plaster-cavity volume. |
 | `cad_validate` | Summary by default; sections `checks`, `mesh`, `exports`, `assembly`, `all`. Explicit coverage distinguishes `passed`, `failed`, `not_checked`, and legacy metric-only `reported` (no invented verdict). A missing section has `valid: null`, never inherits geometry validity. Summary `valid` is retained for compatibility and applies ONLY to geometry/declared assertions; `geometry_valid` and `valid_scope` make this explicit. No printability/strength certification. |
-| `cad_section` | Full material section of immutable STEP geometry, with axis/offset/two tilt angles and optional selected parts. Exact areas, preserved holes/disconnected regions, inline PNG and SVG/DXF/JSON downloads. Derived inspection only; no model mutation. [Plane convention and limits](sections.md). |
+| `cad_section` | Default exact STEP section, or explicit `representation=mesh` for approximate immutable assembly-mesh sections. Axis/offset/two tilts, selected parts, retained holes/regions, PNG/SVG/DXF/JSON. No silent fallback or design mutation. [Conventions and limits](sections.md). |
+| `cad_section_profile` | One cached section boundary as bounded CCW UV points for `extrude_z`. Explicit simplification tolerance; no automatic offsets or inclusion of other boundaries. Use normal build/export/attachment tools for derived fixtures. |
 | `cad_render` | Actual revision-bound images sent to the model. Defaults to `view=review` (iso/top/front plus optional exploded); single views and inspection/standard styles are available. See [automatic visual checkpoints](visual-review.md). |
 
 If submission is uncertain, the error contains its request key: inspect history or retry identical input with that key. If a known candidate is still running after the wait budget, poll it instead of submitting another. A polling/network failure does not silently cancel a candidate. Explicit agent abort requests cancellation when the candidate ID is known; inspect state afterward because cancellation may race with completion.
 
-## Publish and deliver
+## Save and deliver
 
 | Tool | Contract |
 | --- | --- |
@@ -53,4 +54,4 @@ Use `extrude_z` for NEW XY profiles when positive height must mean local +Z rega
 
 `tests/test_kernel_regressions.py` covers disconnected multi-operand Booleans, empty intermediates, explicit direction and legacy winding. `node --test scripts/cad-presentation.test.mjs` tests bounded navigation and honest validation coverage. The real loader test also simulates 150 large attachment notes and checks private-file fallback.
 
-`tests/test_introspection.py` checks stable unique IDs, valid relationships, generic dependencies, shared parameters, missing measurements, API lookup and published-only gateway access. `scripts/test-pi.mjs` loads the actual pi extension and exercises all 18 tools, including idempotent submission, history pages, early cancellation and no-op cancellation of completed work. Run that script against an **isolated** data directory/port: it intentionally builds, publishes and restores test models. Never run it against live project data. Browser tests check that the tree follows an immutable revision and stale component responses cannot overwrite newer selections.
+`tests/test_introspection.py` checks generic dependencies, API lookup and gateway scope. Specialized interface/relationship cases additionally require optional local design fixtures; skips do not establish coverage for those designs. `scripts/test-pi.mjs` loads the actual pi extension and exercises all 19 tools, including idempotent submission, history pages, early cancellation and no-op cancellation of completed work. Run that script against an **isolated** data directory/port: it intentionally builds, publishes and restores test models. Never run it against live project data. Browser tests check that the tree follows an immutable revision and stale component responses cannot overwrite newer selections.

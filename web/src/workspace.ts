@@ -30,7 +30,7 @@ const transcript=$('project-transcript');drawer.append(transcript);
 const parameterSection=$('parameters').closest('section')!;
 const parameterDetails=document.createElement('details');const ps=document.createElement('summary');ps.textContent='Parameters';parameterDetails.append(ps,parameterSection);document.querySelector('main > aside')!.append(parameterDetails);
 const context=document.createElement('div');context.id='chat-context';context.textContent='Whole model';$('chat-form').prepend(context);
-const ask=document.createElement('button');ask.id='ask-selection';ask.textContent='Ask about selection';ask.onclick=()=>{const input=$('chat-input') as HTMLTextAreaElement;input.value=`About ${$('viewport').dataset.part??'the model'}: `;input.focus();};document.querySelector('main > aside')!.append(ask);
+const ask=document.createElement('button');ask.id='ask-selection';ask.textContent='Ask about selection';ask.onclick=()=>{const input=$('chat-input') as HTMLTextAreaElement;input.value=`About ${$('viewport').dataset.part??'the model'}: `;input.dispatchEvent(new Event('input'));input.focus();};document.querySelector('main > aside')!.append(ask);
 const facts=document.createElement('div');facts.id='view-facts';facts.setAttribute('aria-label','Viewed model facts');document.querySelector('header')!.insertBefore(facts,$('connection'));
 const tabs=document.createElement('nav');tabs.className='studio-tabs';tabs.setAttribute('aria-label','Design workspace');
 const modelTab=document.createElement('button');modelTab.textContent='Model';modelTab.setAttribute('aria-controls','viewport');

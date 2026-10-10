@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compactWorkspace, historyPage, validationView } from "./lib/cad-presentation.mjs";
 import { sectionImage } from "./lib/section-image.mjs";
+import { sectionProfile } from "./lib/section-profile.mjs";
 const git = async (cwd: string, ...args: string[]) => (await promisify(execFile)('git', args, {cwd, timeout: 10000, maxBuffer: 256 * 1024})).stdout.trim();
 import { Type, type Static, type TSchema } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -406,9 +407,10 @@ export default function (pi: ExtensionAPI) {
   }
   tool(
     "cad_section",
-    "Create a full material cross-section of an immutable STEP revision; no design/working-state change. Axis x/y/z selects the UNTILTED normal; offset (mm) sets the origin along that axis. tilt=[U,V] degrees: rotate about initial U, then rotated V (right-hand rule). Base frames: X→U=Y,V=Z; Y→U=-X,V=Z; Z→U=X,V=Y. Optional output-part names from cad_tree. Returns exact areas, plane basis, PNG image and SVG/DXF/JSON downloads, retaining holes and disconnected regions. Repeated requests use a bounded derived cache. Mesh-only revisions explicitly unsupported. Busy worker returns 429; retry unchanged. Not a strength/printability check.",
+    "Create a full material cross-section of an immutable STEP revision; no design/working-state change. Axis x/y/z selects the UNTILTED normal; offset (mm) sets the origin along that axis. tilt=[U,V] degrees: rotate about initial U, then rotated V (right-hand rule). Base frames: X→U=Y,V=Z; Y→U=-X,V=Z; Z→U=X,V=Y. Optional output-part names from cad_tree. Returns exact areas, plane basis, PNG image and SVG/DXF/JSON downloads, retaining holes and disconnected regions. Repeated requests use a bounded derived cache. Default representation=step requires STEP. Explicit representation=mesh intersects immutable assembly/world preview meshes and returns APPROXIMATE polygonal sections, not exact analytic surfaces; never silently falls back. Busy worker returns 429; retry unchanged. Not a strength/printability check.",
     Type.Object({
       revision,
+      representation: Type.Optional(StringEnum(["step", "mesh"])),
       axis: Type.Optional(StringEnum(["x", "y", "z"])),
       offset: Type.Optional(Type.Number({minimum: -10000, maximum: 10000})),
       tilt: Type.Optional(Type.Array(Type.Number({minimum:-180, maximum:180}), {minItems:2, maxItems:2})),
@@ -416,6 +418,12 @@ export default function (pi: ExtensionAPI) {
       deflection: Type.Optional(Type.Number({minimum:0.005, maximum:0.5, description:"PNG/SVG/JSON curve sampling tolerance in mm (default 0.02); exact area/DXF unaffected"})),
     }),
     async ({revision: id, ...parameters}, signal) => request(`/api/revisions/${id}/sections`, parameters, signal, 60000),
+  );
+  tool(
+    "cad_section_profile",
+    "Read one boundary of an existing cached cad_section as bounded CCW local-UV points for extrude_z. Does not rebuild or mutate anything. Select outer or a numbered hole; other boundaries are NOT included. Explicit tolerance bounds added polygon simplification error only, not source mesh/curve sampling error. No clearance/kerf offset. Use the result in a normal cad_build document and cad_attach the resulting test/print output, never replace the main design with a fixture.",
+    Type.Object({revision,section_id:Type.String({pattern:'^[a-f0-9]{64}$'}),part:Type.String({minLength:1,maxLength:100}),region_index:Type.Optional(Type.Integer({minimum:0,maximum:1999})),boundary:Type.Optional(StringEnum(['outer','hole'])),hole_index:Type.Optional(Type.Integer({minimum:0,maximum:1999})),tolerance:Type.Optional(Type.Number({minimum:0.005,maximum:0.5})),max_points:Type.Optional(Type.Integer({minimum:3,maximum:512}))}),
+    async(p,s)=>sectionProfile(await request(`/api/revisions/${p.revision}/sections/${p.section_id}/section.json`,undefined,s),p),
   );
   tool(
     "cad_capabilities",

@@ -1,7 +1,6 @@
-import json
 import time
 import uuid
-from pathlib import Path
+from local_examples import load_local_example
 
 import pytest
 from fastapi.testclient import TestClient
@@ -47,7 +46,9 @@ def publish(client, revision, generation, operation="publish"):
 
 
 def test_full_acceptance(client):
-    doc = json.loads(Path("examples/enclosure.json").read_text(encoding="utf-8"))
+    response = client.get("/api/example")
+    assert response.status_code == 200
+    doc = response.json()
     first = wait(client, submit(client, doc)["id"])
     assert first["status"] == "ready", first
     assert first["result"]["report"]["valid"]
@@ -81,7 +82,7 @@ def test_full_acceptance(client):
 
 
 def test_gentle_twist_pipeline(client):
-    doc = json.loads(Path("examples/gentle-twist.json").read_text(encoding="utf-8"))
+    doc = load_local_example("gentle-twist")
     row = wait(client, submit(client, doc)["id"])
     assert row["status"] == "ready", row
     result = row["result"]
@@ -101,7 +102,7 @@ def test_gentle_twist_pipeline(client):
 
 
 def test_casting_box_named_exports(client):
-    doc = json.loads(Path("examples/gentle-twist-casting-box.json").read_text(encoding="utf-8"))
+    doc = load_local_example("gentle-twist-casting-box")
     row = wait(client, submit(client, doc)["id"])
     assert row["status"] == "ready", row
     assert len(row["result"]["report"]["parts"]) == 5

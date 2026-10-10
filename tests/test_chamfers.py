@@ -1,5 +1,5 @@
 import math
-from pathlib import Path
+from local_examples import load_local_example
 
 import pytest
 
@@ -10,9 +10,7 @@ from cad.casting_box import build
 
 
 def document():
-    doc = Document.model_validate_json(
-        Path("examples/gentle-twist-thin-captured-base.json").read_text(encoding="utf-8")
-    )
+    doc = Document.model_validate(load_local_example("gentle-twist-thin-captured-base"))
     doc.casting_box.rail_bottom_chamfer = 3.0
     doc.solid_master.plaster_corner_chamfer = 2.0
     return doc

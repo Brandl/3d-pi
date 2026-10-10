@@ -1,5 +1,5 @@
-import json
-from pathlib import Path
+from local_examples import load_local_example
+from cad.demo import enclosure_document
 
 from fastapi.testclient import TestClient
 
@@ -12,7 +12,7 @@ from cad.storage import Store
 
 
 def document(name="origami-20-locking-base"):
-    return json.loads(Path(f"examples/{name}.json").read_text(encoding="utf-8"))
+    return enclosure_document() if name == "enclosure" else load_local_example(name)
 
 
 def flatten(node):
@@ -54,10 +54,10 @@ def test_generic_feature_dag_preserves_dependencies():
 
 def test_tree_api_and_published_gateway_ownership(tmp_path, monkeypatch):
     store = Store(tmp_path)
-    first, _ = store.create(document(), 0, "first")
+    first, _ = store.create(document("enclosure"), 0, "first")
     store.update(first["id"], "ready", {"report": {"valid": True}, "exports": {}})
     store.publish(first["id"], 0)
-    candidate, _ = store.create(document(), 1, "candidate")
+    candidate, _ = store.create(document("enclosure"), 1, "candidate")
     store.update(candidate["id"], "failed", {"error": "not published"})
     with TestClient(create_app(tmp_path)) as client:
         assert (
@@ -67,7 +67,7 @@ def test_tree_api_and_published_gateway_ownership(tmp_path, monkeypatch):
         )
         assert client.get(f"/api/revisions/{candidate['id']}/tree").status_code == 200
         assert (
-            client.get(f"/api/revisions/{first['id']}/components/part:wall_left").status_code == 200
+            client.get(f"/api/revisions/{first['id']}/components/part:enclosure").status_code == 200
         )
         assert (
             client.get(f"/api/revisions/{first['id']}/components/no-such-node").status_code == 404
@@ -85,7 +85,7 @@ def test_tree_api_and_published_gateway_ownership(tmp_path, monkeypatch):
         assert client.get(f"/api/revisions/{first['id']}/tree").json() == expected
         assert client.get(f"/api/revisions/{candidate['id']}/tree").status_code == 404
         assert (
-            client.get(f"/api/revisions/{candidate['id']}/components/part:wall_left").status_code
+            client.get(f"/api/revisions/{candidate['id']}/components/part:enclosure").status_code
             == 404
         )
         assert (

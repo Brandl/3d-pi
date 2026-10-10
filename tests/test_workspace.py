@@ -72,6 +72,18 @@ def test_explicit_head_assets_idempotency_and_persistence(tmp_path):
         commit(store, bad)
 
 
+def test_legacy_default_fields_compare_without_rewriting_history(tmp_path):
+    store = Store(tmp_path)
+    doc = box_document()  # intentionally unnormalized historical schema-v1 record
+    row, _ = store.create(doc, 0, "legacy-default-fields")
+    store.update(row["id"], "ready", {"report": {"valid": True}, "exports": {}})
+    original = copy.deepcopy(store.get(row["id"]))
+    committed = commit(store, request(row))
+    assert committed["document_hash"] == original["content_hash"]
+    assert store.get(row["id"]) == original
+    assert store.state()["workspace"]["revision"] == row["id"]
+
+
 def test_stale_mismatched_invalid_and_unchanged(tmp_path):
     store = Store(tmp_path)
     first = ready(store)

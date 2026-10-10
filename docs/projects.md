@@ -1,153 +1,116 @@
-# Folder projects
+# Projects and design provenance
 
-This first implementation has **one CAD design/history per project**. It is a
-single-owner organization feature, not a multi-tenant filesystem sandbox. Multiple
-designs inside one project, rename/archive/delete, component releases and atomic
-Git/CAD provenance reconciliation remain future work.
+A project has one saved working design, independent CAD history, source Git
+repository and agent conversation. This is a single-owner organization feature,
+not a multi-tenant filesystem sandbox.
 
-## Operator workflow
+## View versus saved state
 
-The header lists projects, creates a new named project, and downloads its readable
-pi transcript. The browser URL `?project=<id>` binds the viewport and chat. Opening
-another tab cannot retarget an in-flight agent turn. A busy turn blocks prompts in
-other projects; inactive chat polling reads a saved projection without switching
-workers. One pi worker process is active at a time. Switching is not publication.
+The URL `?project=<id>` binds the browser's viewport and chat. Project switching
+and history browsing never publish or restore. Another tab cannot retarget an
+in-flight agent turn. One agent worker is active at a time; a busy turn blocks
+new prompts in other projects. Idle polling does not switch that worker.
 
-The workspace has an explicit working-design pointer and a bottom timeline of named,
-icon-labelled design commits. New builds never advance it. Without a design commit,
-the last legacy publication is the stable fallback; a project with neither stays
-empty rather than adopting its newest fixture. Files contains named print/test sets
-and a separate Other build outputs drawer. Representation selection and timeline
-browsing are read-only. Legacy publication events remain labelled in history.
-Historical unscoped URLs retain published-only access; project routes, candidates,
-downloads and transcripts remain password protected through the gateway.
+The saved head advances only through an explicit design commit. Without one,
+the latest legacy publication is the saved fallback. Separately, **Live** can
+show passing uncommitted builds—even before the first commit—as labelled
+intermediary states. See [studio behavior](studio-ui.md).
 
-`cad_commit` requires name, Unicode icon, original workspace generation/base revision,
-and a tracked source JSON file. The extension reads clean Git HEAD; the service checks
-that the normalized committed JSON matches the immutable CAD document. This links
-existing immutable source and geometry, not a cross-filesystem atomic transaction.
-`cad_attach` registers an inspection, print or test output without moving the pointer.
-Workspace and publication generations are separate. New design commits do not publish.
+Workspace and publication generations are distinct optimistic-concurrency
+counters. `event_sequence` orders read-only state snapshots, including build
+completion and attachment events; it is not a commit count. History, head and
+intermediary eligibility are read in one SQLite snapshot.
 
-`design_commits`, `design_assets` and `design_state` are additive SQLite tables; original
-revision/publication rows and artifacts are not rewritten. `scripts/register-workspace.py`
-registers reviewed existing geometry with explicit roles through the private API. It
-never builds or publishes and is repeatable after partial registration. Do not classify
-old outputs by timestamp or infer roles from arbitrary titles.
+## Save a design and its outputs
 
-The commit endpoint trusts the single-owner caller's Git reference; the installed agent
-tool verifies it against its repository. The CAD container cannot independently access
-the source Git mount. Ready immutable CAD documents remain the geometry source of truth.
+`cad_commit` requires an immutable ready revision, concise name, Unicode icon,
+original workspace generation/base revision and a tracked source JSON file.
+The tool reads clean project Git HEAD; the service checks normalized document
+identity. The private endpoint trusts its single-owner caller's Git reference:
+the CAD container does not independently read the source repository.
 
-## Files
+This links source and geometry but is **not** a distributed atomic transaction.
+A source commit, CAD commit and several output attachments can complete only
+partially. Inspect current state after interruptions; do not reset or overwrite
+history to pretend the operation was atomic.
 
-Under `~/.local/share/3d-pi/projects/<id>/`:
+`cad_attach` registers a named inspection, print or test output against a design
+commit without moving the head. Outputs retain their own immutable documents,
+exports and instructions. Registration is explicit, not inferred from filenames.
+Saving a design is not publication; a historical restore appends new history.
 
+## Storage
+
+The default runtime root is `~/.local/share/3d-pi`; it is private and outside
+application Git. Under `projects/<id>/`:
+
+```text
+project.json          # stable ID and display name
+source/               # editable documents; independent Git repository
+pi/sessions/          # canonical private pi session trees
+pi/transcript.md      # readable event transcript
+pi/requests.json      # request deduplication/interruption journal
+pi/web-state.json     # bounded idle browser projection
+cad                   # host-side symlink to that project's CAD storage
 ```
-project.json              # stable ID and display name
-source/                   # editable sources; its own local Git repository
-pi/
-  sessions/*.jsonl        # canonical pi session trees, messages, tools, image blocks
-  transcript.md           # readable new user/assistant/tool events
-  requests.json          # durable deduplication/interrupted-turn journal
-  web-state.json         # bounded idle browser projection
-  legacy-shared/         # imported pre-project web-agent sessions, if applicable
-cad -> ../../cad/projects/<id>/cad
-```
 
-The CAD symlink works **on the host**. Its target has the project's database and
-immutable artifacts. Storage is split across service mounts so the geometry service
-does not receive transcripts/credentials and the agent does not receive a writable
-CAD database. The link intentionally does not resolve inside the agent container.
-For a portable full project backup, include/dereference its CAD target as well as
-source and pi files; a plain tar without dereferencing will only capture the link.
-New project folders and their host-side CAD link are materialized on catalog access.
-The agent must use its scoped API, never the host-side link.
+CAD storage contains SQLite state, immutable artifacts, uploads and derived
+section caches. The original default project uses the legacy ID `dripper` and
+root CAD storage for compatibility; new projects have generated IDs and their
+own storage directories. This does not distribute a personal dripper design.
 
-Provider credentials and login secrets stay in the existing global private stores,
-**not in project folders**. Transcripts and generated runtime files stay outside
-source Git repositories and images. JSONL is canonical; Markdown omits reasoning
-blocks and binary image payloads and records visible events chronologically (not a
-flattened replacement for pi's branch tree). The website serves only the readable
-transcript, not arbitrary files or raw session JSONL. Protect/backup transcripts as
-private operator data. This stores the web pi agent's transcript, not the separate
-host coding-agent conversation.
+The CAD link is a host convenience; it deliberately does not grant the agent
+writable access to the CAD database. Use the scoped API. A portable backup must
+include the link's target, not just the symlink. Back up source Git, sessions,
+databases, uploads and artifacts consistently; see [operations](container-deployment.md).
+
+Provider credentials and website login state live in separate private global
+stores, not project source. The readable transcript omits reasoning and binary
+image payloads; it is not a replacement for the canonical session tree. Treat
+both as private data. The website does not expose arbitrary session files.
 
 ## Project uploads
 
-**Files → Project uploads** accepts one file and an optional note. Uploads belong to
- the project, not the viewed revision; they never advance the working model or
-publication. Notes can be edited (4000 characters); concurrent stale edits are
-rejected. Deleting an upload requires confirmation and does not affect CAD outputs.
+Files → Project uploads accepts an opaque file plus an optional note. Uploads
+never become a CAD revision or start an agent task automatically. Files and notes
+are untrusted reference data, not permission to execute or import them.
 
-Limits: 10 MiB per file, 512 MiB and 500 files per project. Content is stored as
-opaque bytes under that project's CAD `uploads/` folder with random internal IDs;
-metadata, SHA-256 and notes live in the additive `project_uploads` SQLite table.
-Back up both the database and uploads folder. Files are never automatically opened,
-executed, extracted, imported into CAD, or added to source Git. Treat uploaded
-content and notes as untrusted reference data, not agent instructions. Avoid secrets.
+Limits are 10 MiB/file, 512 MiB and 500 files/project; notes allow 4000 characters.
+Notes use optimistic versions; deleting an upload requires confirmation and does
+not delete CAD outputs. Downloads are authenticated attachments, not inline HTML.
 
-Authenticated, project-prefixed routes:
+Project-prefixed routes:
+
 - `GET /api/uploads`: list metadata and notes.
-- `POST /api/uploads`: multipart `file` plus optional `note`.
-- `PATCH /api/uploads/{id}`: JSON `{note, version}` (optimistic note update).
-- `DELETE /api/uploads/{id}`: permanently delete only this uploaded asset.
-- `GET|HEAD /downloads/uploads/{id}/file`: attachment-only download with byte ranges.
+- `POST /api/uploads`: multipart `file`, optional `note`.
+- `PATCH /api/uploads/{id}`: `{note, version}`.
+- `DELETE /api/uploads/{id}`: delete that uploaded asset.
+- `GET|HEAD /downloads/uploads/{id}/file`: download, with byte-range support.
 
-Browser mutations require the existing session CSRF token and same-origin checks.
-Downloads remain authenticated and use octet-stream/nosniff, not inline HTML.
-The agent can discover listing/download routes through CAD capabilities and inspect
-reference files when requested; upload alone does not start an agent task.
+Browser mutations require session authentication, same-origin checks and CSRF.
+Avoid uploading credentials. An upload alone is not authorization to adopt it
+as the current design.
 
-## API and agent context
+## API scope and limits
 
-- `GET /api/projects`: catalog. `POST /api/projects` with `{name}`: create.
-- `/projects/<id>/api/...`: state, schema, build, revision, validation,
-  publish/restore, artifact and WebSocket contracts, scoped to that project.
-- `POST /projects/<id>/api/workspace/commits`: append named/icon-labelled design change,
-  using optimistic workspace generation and exact base revision; idempotent request key.
-- `POST /projects/<id>/api/workspace/assets`: attach a named inspection/print/test output.
-- `GET/HEAD /projects/<id>/downloads/sets/<asset>/<format>`: protected, meaningfully named
-  downloads with range support. Registered outputs remain accessible beyond the latest
-  100-build listing. No workspace mutations are exposed directly through the gateway.
-- `/projects/<id>/downloads/...`: project-bound downloads.
-- `/projects/<id>/api/agent/{state,prompt,abort,transcript}`: protected gateway routes.
+Use `/projects/<id>/api/...` for state, schema, builds, revisions and inspection.
+Export/download URLs retain the same project prefix. Unscoped private APIs alias
+the legacy default project; unscoped gateway previews remain publication-only.
+Project-scoped gateway access also permits registered outputs and eligible ready
+candidates/intermediaries. Unknown or cross-project revisions are not resolved.
 
-Names never become filesystem paths; new IDs are generated. Browser selection is
-URL-local, not a mutable global CAD selection. Each pi subprocess has an immutable
-project-scoped `CAD_URL`, project source cwd and explicit session directory.
-`SessionManager.continueRecent` resumes that project's latest session. Export URLs
-retain the project prefix. The old unscoped API aliases the dripper for compatibility.
-Requests cannot resolve another project's revisions through their current project.
+- `/api/projects`: GET catalog; POST `{name}` creates a project.
+- `/projects/<id>/api/workspace/commits`: private design-commit mutation.
+- `/projects/<id>/api/workspace/assets`: private output registration.
+- `/projects/<id>/downloads/sets/<asset>/<format>`: authenticated named downloads.
+- `/projects/<id>/api/agent/{state,prompt,abort,transcript}`: gateway agent routes.
 
-There is one shared geometry semaphore and at most eight active/queued tasks globally;
-the existing per-store queue bound also applies. Idempotency keys and publication
-generations are project-local. Project creation never multiplies worker capacity.
-The agent's built-in filesystem tools remain single-owner tools; these folders are
-not security isolation from one another.
+The gateway does not expose arbitrary private CAD mutations. Each agent worker
+receives a fixed scoped `CAD_URL`, source cwd and session directory. There is one
+shared geometry worker, at most eight active/queued tasks globally and four per
+project. Creating projects does not multiply worker capacity.
 
-## Migration and rollback
-
-`scripts/migrate-project-folders.py --runtime ...` is an **offline, copy-only**
-migration for the existing dripper/B-01 installation. Stop the pod first. It checks
-for active work, locks the CAD root, refuses existing destinations, takes SQLite
-backups, checks integrity and verifies every copied artifact/session SHA-256.
-Original storage, source workspace and agent sessions are retained unchanged.
-
-- Dripper retains the complete original shared CAD history, including historical
-  development candidates, and all 30 publication events/IDs.
-- Bike basket twist-lock receives copies of the three B-01 candidates, no fabricated
-  publications, generation 0, and its source files.
-- Imported revision rows/artifact bytes are unchanged, including old parent IDs and
-  base generations. Before publishing an imported B-01 candidate, rebuild its source
-  against the new project's current generation with a new request key. Never rewrite
-  its original base generation to force publication.
-- Both folders archive the original **mixed shared** web-agent transcript, with hashes
-  and provenance. It is not falsely split or automatically replayed as new context.
-  New pi sessions start project-scoped. Source AGENTS files explain the migration.
-
-The dripper's former default artifact URLs continue resolving the same bytes. If a
-migration is interrupted between its two destination renames, complete the documented
-staging rename before starting services; do not rerun or overwrite destinations.
-Rollback uses the retained pre-project images and original data. Preserve all new
-project data before rollback; older images do not know about post-migration work.
+Project rename/archive/delete, multiple saved designs per project and versioned
+component instances are not implemented. Historical installation-specific
+migration scripts are not fresh-install instructions; do not apply them to an
+unrelated runtime.

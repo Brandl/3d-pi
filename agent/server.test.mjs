@@ -69,6 +69,29 @@ test('project transcript persists visible events without thinking or image paylo
   }finally{await bridge.dispose();rmSync(directory,{recursive:true});}
 });
 
+for(const mode of ['idle','progress'])test(`turn timeout distinguishes ${mode} and never replays`,async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'cad-timeout-'));
+ const session=fakeSession();let emit=()=>{};
+ session.subscribe=handler=>{emit=handler;return ()=>{};};
+ const bridge=createBridge({session,token:'x'.repeat(40),journalPath:join(directory,'requests.json'),idleTimeoutMs:200,turnTimeoutMs:700});
+ await new Promise(resolve=>bridge.server.listen(0,'127.0.0.1',resolve));
+ const base=`http://127.0.0.1:${bridge.server.address().port}`;const headers={Authorization:'Bearer '+'x'.repeat(40),'Content-Type':'application/json'};
+ const timer=mode==='progress'?setInterval(()=>emit({type:'tool_execution_end',toolCallId:'test'}),30):null;
+ try{
+  await fetch(base+'/prompt',{method:'POST',headers,body:JSON.stringify({text:'test',request_key:'timeout-test'})});
+  let state;
+  for(let i=0;i<100;i++){
+   state=await (await fetch(base+'/state',{headers})).json();
+   if(!state.busy)break;
+   await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  assert.equal(state.job.status,'timed_out');
+  assert.equal(state.job.stop_reason,mode==='idle'?'idle_timeout':'turn_timeout');
+  assert.match(state.error,/Inspect existing changes/);
+  assert.equal(session.calls,1);
+ }finally{clearInterval(timer);await bridge.dispose();await new Promise(resolve=>bridge.server.close(resolve));rmSync(directory,{recursive:true});}
+});
+
 test('host credential bridge never invokes refresh or writes credentials',async()=>{
   const directory=mkdtempSync(join(tmpdir(),'cad-credentials-'));const path=join(directory,'auth.json');
   const original=JSON.stringify({test:{type:'oauth',access:'dummy',refresh:'dummy-refresh',expires:Date.now()+3600000}});

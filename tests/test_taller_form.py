@@ -1,4 +1,4 @@
-from pathlib import Path
+from local_examples import load_local_example
 
 import pytest
 
@@ -8,9 +8,7 @@ from cad.schema import Document
 
 
 def origami():
-    return Document.model_validate_json(
-        Path("examples/origami-20-locking-base.json").read_text(encoding="utf-8")
-    )
+    return Document.model_validate(load_local_example("origami-20-locking-base"))
 
 
 def test_sixty_mm_top_clearance_preserves_joint_checks():

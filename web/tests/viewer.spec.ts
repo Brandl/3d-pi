@@ -60,10 +60,13 @@ test("live publication, camera controls, last-good model, restore, reconnect", a
   doc.parameters.hole_offset = 10;
   const second = await build(doc, initial.generation + 1);
   expect(second.status).toBe("ready");
+  // A passing build now streams before publication, without moving the saved head.
   await expect(page.locator("#viewport")).toHaveAttribute(
     "data-revision",
-    first.id,
+    second.id,
   );
+  await expect(page.locator("#viewport")).toHaveAttribute("data-working-revision", first.id);
+  await expect(page.locator("#view-basis")).toHaveText("Intermediary state · not committed");
   expect(
     (
       await request.post(scoped(`/api/revisions/${second.id}/publish`), {

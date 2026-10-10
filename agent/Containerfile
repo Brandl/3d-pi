@@ -2,8 +2,10 @@ FROM docker.io/library/node:24-alpine@sha256:333f6b3eca25980d5682c26207665b93c94
 RUN apk add --no-cache bash git python3 curl
 WORKDIR /opt/agent
 COPY agent/package.json agent/package-lock.json ./
+COPY LICENSE THIRD_PARTY_NOTICES.md ./
+COPY LICENSES/ ./LICENSES/
 RUN npm ci --ignore-scripts --omit=dev
-COPY agent/main.mjs agent/server.mjs agent/credentials.mjs agent/health.mjs agent/projects.mjs ./
+COPY agent/main.mjs agent/server.mjs agent/credentials.mjs agent/health.mjs agent/projects.mjs agent/provider-status.mjs ./
 COPY .pi/extensions/cad.ts ./cad.ts
 COPY .pi/extensions/lib/ ./lib/
 RUN chmod -R a+rX /opt/agent

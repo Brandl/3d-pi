@@ -1,29 +1,87 @@
-# Conversation-first studio UI
+# Using the alpha studio
 
-Visual reference: `better-tool` upload `caduiux.PNG`, note “Inspi”.
+The authenticated studio keeps conversation, model and history together. Desktop
+has persistent chat beside the model; mobile switches between Model, Parts and
+Chat without discarding the composer. The viewer uses locally served fonts/assets.
 
-## Layout
+## Model and parts
 
-- Desktop: persistent left-hand conversation and anchored composer; model canvas on the right; visual history below the canvas.
-- Self-hosted Inter Variable typography, a consistent spacing/type scale, neutral surfaces and a restrained orange accent. Part colours come from the revision's geometry data.
-- Separate navigation and camera-control rows, a white model stage with a clear title, and optional grid/axes (off initially). Fit uses projected bounds rather than an oversized bounding sphere. Fitted views reframe on resize; deliberate orbit/zoom is preserved.
-- Model/Parts controls keep the viewport mounted. Parts opens a contextual right-hand inspector rather than permanently taking canvas space.
-- Make is a central manufacturing sheet beside the conversation, with real output previews, print/test files and instructions. It does not block the chat with a modal. Files remains a separate drawer for reference uploads, exports and component library. No fake manual or certification is generated.
-- Header badges describe the **viewed** revision, not necessarily the working design.
-- Mobile retains Model/Parts/Chat panes and existing keyboard-height handling; unsent drafts stay in the mounted composer.
+Orbit, pan, zoom and Fit inspect the viewed revision. Fitted views reframe on
+resize; deliberate camera manipulation is preserved. Grid/axes are optional.
+Parts exposes the revision-bound tree and contextual measurements. Selection and
+visual clipping are passed to the agent as context, not authorization to restore
+or change geometry. Clipping is not an exact solid section.
 
-## Visual history
+History thumbnails are rendered from each revision's actual immutable mesh on
+white, not repurposed screenshots. Loading is lazy and bounded; a software
+projection supports clients without WebGL. An unavailable thumbnail is shown as
+unavailable, never replaced by another revision's image.
 
-`web/src/revision-thumbnails.ts` renders each revision's actual immutable preview mesh into a dedicated320×200 orthographic PNG, on opaque white. It fits and centres the **projected vertices**, not the image canvas of a labelled review screenshot. No grids, legends, axes, emoji overlays, screenshot crops or background replacement. A single shared WebGL renderer is reused and geometries/materials are disposed after each render. A depth-sorted software projection supports non-WebGL clients (approximate occlusion, not exact hidden-line analysis).
+## Live, intermediary and saved states
 
-Requests are visibility-driven and serialized, with a48-bitmap cache and explicit geometry/download budgets (64MiB input,1M triangles with WebGL,100K for software). Failures show an unavailable placeholder, never an unrelated or dark screenshot. Geometry data remains project-scoped/authenticated; no CAD rebuilds, new revisions or artifact rewrites. Selecting a thumbnail only browses; restoration retains the separate explicit agent action and provenance/concurrency safeguards.
+**Live** follows successful CAD builds before they are saved. Eligible builds must
+be ready, pass declared geometry checks, differ from the saved document, have
+been created after the saved head, and not be registered outputs. The newest 32
+eligible builds appear as dashed **Intermediary** timeline entries. Raw source
+edits and unfinished/failed builds do not stream. Failures leave the last good
+preview visible.
 
-## Chat cards
+Intermediary means **not committed**. It is not approval, a manufacturing package
+or proof of physical fit. Chat context distinguishes this preview from the saved
+working head. Project WebSocket updates normally arrive within about two seconds;
+polling recovers missed updates. A persisted event sequence rejects stale snapshots.
 
-Earlier user exchanges are grouped into expandable cards showing the request and a short excerpt of the last assistant answer. The newest exchange remains expanded. Tool-calling progress notes join the expandable activity group instead of looking like separate final answers. Nested tool activity stays available; error counts remain visible on collapsed groups. An active failure can open its details, but a recovered tool error does not leave an entire completed turn expanded. Expansion choices survive ordinary polling updates.
+**Working design** follows saved commits only. Clicking its current thumbnail
+also follows saved commits rather than pinning that particular revision. Older
+history and explicitly selected intermediaries stay pinned; **Live** resumes
+previews. A new saved head during historical browsing offers **New working design**
+instead of switching the view underneath you.
 
-This is **visual grouping only**: no messages are deleted, no agent-context compaction is requested, and no server history is rewritten. The server's existing bounded message window still applies; full transcript access remains in Files. Cards say “Earlier request”, not “validated” or “completed”, because a message boundary does not prove successful execution or manufacturing readiness. Previews use textContent and full messages retain the safe formatter.
+A new commit replaces the current intermediary group, without deleting underlying
+builds. A preview already on screen gets its saved name/status without reloading
+geometry. A late-finishing build started before the commit cannot replace it.
+Named print/test/inspection outputs leave the intermediary feed when attached.
+None of these view updates commits, restores, attaches or publishes anything.
 
-## Verification
+## Make and Files
 
-`web/tests/thumbnails.spec.ts` checks opaque-white corners, visible mesh content, equal opposing margins and safe padding with both WebGL and software rendering. `web/tests/studio.spec.ts`: left-hand placement at1024/1440px, compact cards and retained expansion, real thumbnails, draft preservation, Parts/Make controls, and non-mutating history browsing. Existing mobile tests cover320–844px and desktop transition; cowork tests cover WebGL and image fallback. Legacy-publication viewer tests now use their own fresh project so an existing working head cannot invalidate the fixture assumptions.
+Make shows named print/test sets and their instructions beside the conversation.
+During an uncommitted preview, those sets still belong to the saved design and
+need not match the viewed geometry. Other builds contains raw viewed-revision
+exports, not automatically approved print sets. Check part identity, units,
+orientation, instructions and relevant physical tests before manufacturing.
+
+Files also contains reference uploads/notes, transcript access and the
+[component reference library](component-library.md). Views and downloads remain
+project-scoped and authenticated. Historical downloads retain their original
+bytes. A restore action prepares an agent request; browsing alone never restores.
+
+## Conversation and interruptions
+
+- Enter sends; Shift+Enter adds a newline; IME composition does not submit.
+- Earlier exchanges collapse visually; this does not delete messages or compact
+  the agent's context. Full transcript access remains separate.
+- Progress is quiet and inline. Each raw tool result/error can expand independently.
+  A final response or passed geometry check is not a manufacturing certificate.
+- Drafts and unconfirmed outgoing payloads are retained per project and browser
+  tab in session storage. Storage failure prevents sending. Explicit logout clears
+  these records; use a trusted device.
+- **Check / retry** reuses the original payload, context and key. A matching
+  polled job receipt can acknowledge lost delivery without resubmission. There
+  is no automatic replay, and newer typing survives an older acknowledgement.
+- Very old uncertain requests require manual history inspection because server
+  deduplication retention is bounded. Discarding a receipt does not cancel work
+  that the server already accepted.
+- Stop, timeout and provider interruption do not roll back changes. Inspect source,
+  CAD history and attachments before asking the agent to continue.
+
+The agent has a 15-minute no-progress timeout and a one-hour turn bound. Connection
+loss is reported as reconnecting, not invented evidence that the agent stopped.
+“View model” and “Open files” response actions navigate the workspace; they do not
+prove a response has a revision-bound manufacturing attachment.
+
+## Implementation and testing
+
+Core UI files are under `web/src/`. Browser tests cover live commits/intermediaries,
+stale events, failed previews, draft recovery, thumbnails, mobile controls and
+historical browsing. See [isolated test instructions](../CONTRIBUTING.md).

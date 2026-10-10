@@ -1,4 +1,4 @@
-from pathlib import Path
+from local_examples import load_local_example
 
 import numpy as np
 import pytest
@@ -9,9 +9,7 @@ from cad.schema import Document
 
 @pytest.fixture(scope="module")
 def specification():
-    doc = Document.model_validate_json(
-        Path("examples/gentle-twist.json").read_text(encoding="utf-8")
-    )
+    doc = Document.model_validate(load_local_example("gentle-twist"))
     return doc, Surface.from_document(doc)[0]
 
 

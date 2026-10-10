@@ -3,27 +3,38 @@ import {revisionThumbnail,resetThumbnailQueue} from './revision-thumbnails';
 export type DesignCommit={id:string;generation:number;revision:string;name:string;icon:string;created:number;source_commit:string;source_file:string};
 type Asset={id:string;commit_id:string;revision:string;role:string;name:string;note:string};
 export type Workspace={commit_id:string|null;generation:number;revision:string|null;commits:DesignCommit[];assets:Asset[]};
-type Entry={key:string;revision:string;name:string;icon:string;detail:string;commit?:string};
-type State={revision:string|null;generation:number;candidates?:string[];candidate_names?:Record<string,string>;publications?:{generation:number;revision:string;name?:string|null;operation:string}[];workspace?:Workspace|null};
+export type Intermediary={revision:string;name:string;created:number};
+type Entry={key:string;revision:string;name:string;icon:string;detail:string;commit?:string;intermediary?:boolean};
+type State={revision:string|null;generation:number;candidates?:string[];candidate_names?:Record<string,string>;publications?:{generation:number;revision:string;name?:string|null;operation:string}[];workspace?:Workspace|null;intermediates?:Intermediary[]};
 const $=(id:string)=>document.getElementById(id)!;
 export function createHistory(changed:()=>void){
  let entries:Entry[]=[],index=-1,key='',assetsKey='',assetEpoch=0,visibleKey='';
+ let headKey='',headRevision:string|null=null,observedHead:string|null=null,newWorking=false;
  let params=new URL(location.href).searchParams;
  let commit=params.get('commit'),version=params.get('version'),candidate=params.get('candidate');
+ let workingOnly=params.get('view')==='working';
+ const live=$('timeline-latest') as HTMLButtonElement;
+ live.textContent='Live';live.setAttribute('aria-label','Follow live intermediary previews');$('timeline-actions').prepend(live);
  const restore=document.createElement('button');restore.id='timeline-restore';restore.textContent='Ask π to restore';restore.hidden=true;$('timeline-working').before(restore);
- const choose=(entry:Entry|null,revision?:string)=>{
+ const choose=(entry:Entry|null,revision?:string,onlyWorking=false)=>{
+  // Saved head follows commits only; Live follows successful unsaved builds too.
+  if(entry?.intermediary){revision=entry.revision;entry=null;}
+  if(entry?.key===headKey&&!revision){entry=null;onlyWorking=true;}
+  if(!entry&&revision===headRevision){revision=undefined;onlyWorking=true;}
+  workingOnly=onlyWorking;
   commit=entry?.commit??null;version=entry&&!entry.commit?entry.key.slice(2):null;candidate=revision??null;
-  const url=new URL(location.href);for(const n of ['commit','version','candidate'])url.searchParams.delete(n);
-  if(commit)url.searchParams.set('commit',commit);if(version)url.searchParams.set('version',version);if(candidate)url.searchParams.set('candidate',candidate);
+  const url=new URL(location.href);for(const n of ['commit','version','candidate','view'])url.searchParams.delete(n);
+  if(commit)url.searchParams.set('commit',commit);if(version)url.searchParams.set('version',version);if(candidate)url.searchParams.set('candidate',candidate);if(workingOnly)url.searchParams.set('view','working');
   history.replaceState(null,'',url);changed();
  };
  $('timeline-previous').onclick=()=>{if(index>0)choose(entries[index-1]);};
  $('timeline-next').onclick=()=>{if(index<entries.length-1)choose(entries[index+1]);};
- $('timeline-latest').onclick=$('timeline-working').onclick=()=>choose(null);
+ live.onclick=()=>choose(null);
+ $('timeline-working').onclick=()=>choose(null,undefined,true);
  $('timeline-position').oninput=e=>{const entry=entries[Number((e.target as HTMLInputElement).value)];if(entry)choose(entry);};
  $('draft-select').onchange=e=>choose(null,(e.target as HTMLSelectElement).value||undefined);
  window.addEventListener('cad:view',e=>choose(null,(e as CustomEvent).detail.revision??undefined));
- window.addEventListener('popstate',()=>{params=new URL(location.href).searchParams;commit=params.get('commit');version=params.get('version');candidate=params.get('candidate');changed();});
+ window.addEventListener('popstate',()=>{params=new URL(location.href).searchParams;commit=params.get('commit');version=params.get('version');candidate=params.get('candidate');workingOnly=params.get('view')==='working';changed();});
  async function files(assets:Asset[],owner:string){
   const next=JSON.stringify([owner,assets]);if(next===assetsKey)return;assetsKey=next;const epoch=++assetEpoch;
   const target=$('related-files');target.replaceChildren();
@@ -38,34 +49,54 @@ export function createHistory(changed:()=>void){
   const working=workspace?.revision??state.revision;
   const legacy=(state.publications??[]).slice().sort((a,b)=>a.generation-b.generation).map(p=>({key:'p:'+p.generation,revision:p.revision,name:p.name??`Version ${p.generation}`,icon:'◷',detail:`Legacy ${p.operation} · v${p.generation} · ${p.revision}`}));
   entries=[...legacy,...(workspace?.commits??[]).map(c=>({key:'c:'+c.id,revision:c.revision,name:c.name,icon:c.icon,detail:`${c.name}\nGit ${c.source_commit}\n${c.source_file}\nCAD ${c.revision}`,commit:c.id}))];
+  const intermediates=state.intermediates??[];
+  const newest=intermediates.at(-1);
+  entries.push(...intermediates.map(i=>({key:'i:'+i.revision,revision:i.revision,name:`Intermediary · ${i.name}`,icon:'◌',detail:`Intermediary state · not committed\n${i.name}\nCAD ${i.revision}`,intermediary:true})));
+  headKey=workspace?.commit_id?'c:'+workspace.commit_id:legacy.at(-1)?.key??'';
+  headRevision=working??null;
+  const following=!commit&&!version&&!candidate;
+  if(observedHead!==null&&observedHead!==headKey&&!following)newWorking=true;
+  if(following)newWorking=false;
+  observedHead=headKey;
+  $('timeline-working').textContent=newWorking?'New working design →':'Working design';
+  $('timeline-working').dataset.newWorking=String(newWorking);
+  $('timeline-working').title=newWorking?'A commit arrived while you were browsing. Show the working design without restoring anything.':'Follow the latest working design';
   let selected=commit?entries.find(e=>e.commit===commit):version?entries.find(e=>e.key==='p:'+version):undefined;
+  // A manually pinned intermediary may since have become a saved commit.
+  if(!selected&&candidate)selected=[...entries].reverse().find(e=>e.commit&&e.revision===candidate);
   const asset=workspace?.assets.slice().reverse().find(a=>a.revision===candidate);
   if(asset)selected=entries.find(e=>e.commit===asset.commit_id);
   const allowed=new Set([...(state.candidates??[]),...entries.map(e=>e.revision),...(workspace?.assets??[]).map(a=>a.revision)]);
   const invalid=Boolean(candidate&&!allowed.has(candidate)||commit&&!selected||version&&!selected);
-  const viewed=!invalid&&candidate?candidate:selected?.revision??working;
+  const viewed=!invalid&&candidate?candidate:selected?.revision??(following&&!workingOnly&&newest?newest.revision:working);
+  const intermediary=intermediates.find(i=>i.revision===viewed);
+  live.textContent=newest&&viewed!==newest.revision?'New preview':'Live';
+  live.title='Follow successful intermediary states. This never commits, restores or publishes a design.';
+  live.disabled=following&&!workingOnly;
+  live.setAttribute('aria-pressed',String(following&&!workingOnly));
   restore.hidden=!selected||viewed!==selected.revision||viewed===working;
   restore.onclick=()=>window.dispatchEvent(new CustomEvent('cad:draft',{detail:{text:`Restore design revision ${selected?.revision} (${selected?.name}) as a NEW working-design commit, preserving history. Inspect its source and the current working design first; restore corresponding project source, verify geometry, and commit with a short name and Unicode icon. Do not publish.`}}));
   const owner=selected?.commit??workspace?.commit_id??'';
   const related=workspace?.assets.filter(a=>a.commit_id===owner)??[];
-  index=selected?entries.indexOf(selected):entries.map(e=>e.revision).lastIndexOf(working??'');
+  index=selected?entries.indexOf(selected):entries.map(e=>e.revision).lastIndexOf(viewed??'');
   const listKey=JSON.stringify(entries);
-  if(key!==listKey){key=listKey;resetThumbnailQueue();$('history').replaceChildren();for(const entry of entries){const li=document.createElement('li');li.dataset.key=entry.key;const button=document.createElement('button');button.type='button';button.title=entry.detail;button.setAttribute('aria-label',entry.name);const icon=document.createElement('span');icon.className='commit-icon';icon.textContent=entry.icon;const label=document.createElement('span');label.className='commit-label';label.textContent=entry.name;const thumb=revisionThumbnail(entry.revision);button.append(thumb,icon,label);button.onclick=()=>choose(entry);li.append(button);$('history').append(li);}}
+  if(key!==listKey){key=listKey;resetThumbnailQueue();$('history').replaceChildren();for(const entry of entries){const li=document.createElement('li');li.dataset.key=entry.key;li.classList.toggle('intermediary',Boolean(entry.intermediary));const button=document.createElement('button');button.type='button';button.title=entry.detail;button.setAttribute('aria-label',entry.name);const icon=document.createElement('span');icon.className='commit-icon';icon.textContent=entry.icon;const label=document.createElement('span');label.className='commit-label';label.textContent=entry.name;const thumb=revisionThumbnail(entry.revision);button.append(thumb,icon,label);button.onclick=()=>choose(entry);li.append(button);$('history').append(li);}}
   Array.from($('history').children).forEach((li,i)=>{li.classList.toggle('current',i===index);li.querySelector('button')!.setAttribute('aria-pressed',String(i===index));});
   const activeKey=entries[index]?.key??'';
   if(activeKey!==visibleKey){visibleKey=activeKey;requestAnimationFrame(()=>$('history').querySelector('.current')?.scrollIntoView({block:'nearest',inline:'nearest'}));}
   const pos=$('timeline-position') as HTMLInputElement;pos.max=String(Math.max(0,entries.length-1));pos.value=String(Math.max(0,index));pos.disabled=entries.length<2;
   ($('timeline-previous') as HTMLButtonElement).disabled=index<=0;($('timeline-next') as HTMLButtonElement).disabled=index<0||index>=entries.length-1;
-  ($('timeline-latest') as HTMLButtonElement).disabled=!candidate&&!commit&&!version;
-  $('timeline-status').textContent=invalid?'Requested view unavailable · working design unchanged':asset?`${asset.name} · ${asset.role==='inspection'?'inspection':'output'} · working design unchanged`:candidate&&candidate!==working?'Build preview · not the working design':selected?`${selected.name} · browsing only` :working?'Working design':'No working design · ask π to commit a model';
-  const viewport=$('viewport');viewport.dataset.workingRevision=working??'';viewport.dataset.workspaceGeneration=String(workspace?.generation??0);viewport.dataset.designCommit=workspace?.commit_id??'';
-  const select=$('draft-select') as HTMLSelectElement;select.replaceChildren(new Option('Working design',''));for(const id of state.candidates??[]){select.add(new Option(state.candidate_names?.[id]??id.slice(0,8),id));}select.value=candidate??'';
+  $('timeline-status').textContent=intermediary?'Intermediary state · not committed':invalid?'Requested view unavailable · working design unchanged':asset?`${asset.name} · ${asset.role==='inspection'?'inspection':'output'} · working design unchanged`:selected?`${selected.name} · browsing only`:candidate&&candidate!==working?'Build preview · not the working design' :working?'Working design':'No working design · ask π to commit a model';
+  const viewport=$('viewport');viewport.dataset.workingRevision=working??'';viewport.dataset.workspaceGeneration=String(workspace?.generation??0);viewport.dataset.designCommit=workspace?.commit_id??'';viewport.dataset.intermediaryRevision=intermediary?.revision??'';
+  const makeHint=document.querySelector<HTMLElement>('#make-panel .make-intro');
+  if(makeHint)makeHint.textContent=intermediary||candidate&&!invalid&&!selected&&!asset?'Named print sets belong to the saved design, not the uncommitted preview. Other builds contains the viewed geometry, not a saved print set. Review before manufacturing.':'Print files, fit tests and assembly instructions for the selected design. Review the instructions before manufacturing.';
+  const select=$('draft-select') as HTMLSelectElement;select.replaceChildren(new Option('Live preview',''));for(const id of state.candidates??[]){select.add(new Option(state.candidate_names?.[id]??id.slice(0,8),id));}select.value=candidate??intermediary?.revision??'';
   const views=$('representation') as HTMLSelectElement;const assembly=selected?.revision??working;views.replaceChildren(new Option('Assembly',assembly??''));
   // Keep every related output selectable after leaving it. A revision may have
   // multiple attachment records (e.g. corrected instructions); use the latest label.
   const relatedViews=new Map(related.map(a=>[a.revision,a]));
   for(const a of relatedViews.values())if(a.revision!==assembly)views.add(new Option(a.name,a.revision));
-  if(viewed&&!Array.from(views.options).some(o=>o.value===viewed))views.add(new Option(asset?.name??'Build preview',viewed));views.value=viewed??'';views.disabled=!viewed;
+  if(viewed&&!Array.from(views.options).some(o=>o.value===viewed))views.add(new Option(asset?.name??(intermediary?'Intermediary state (not committed)':'Build preview'),viewed));views.value=viewed??'';views.disabled=!viewed;
   void files(related,owner);
   return viewed??null;
  };

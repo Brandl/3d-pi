@@ -161,8 +161,11 @@ def create_app(data_dir: Path | None = None):
             # Bound streamed requests as well as those with Content-Length.
             from cad.uploads import MAX_BODY, UPLOAD_ROUTE
 
-            limit = MAX_BODY if (request.method == "POST" and
-                                 UPLOAD_ROUTE.fullmatch(request.url.path)) else 256 * 1024
+            limit = (
+                MAX_BODY
+                if (request.method == "POST" and UPLOAD_ROUTE.fullmatch(request.url.path))
+                else 256 * 1024
+            )
             body = bytearray()
             async for chunk in request.stream():
                 if len(body) + len(chunk) > limit:
@@ -231,7 +234,9 @@ def create_app(data_dir: Path | None = None):
 
     @app.get("/api/example")
     def example():
-        return json.loads((ROOT / "examples" / "enclosure.json").read_text(encoding="utf-8"))
+        from cad.demo import enclosure_document
+
+        return enclosure_document()
 
     @app.get("/api/projects")
     def projects():
@@ -316,20 +321,28 @@ def create_app(data_dir: Path | None = None):
 
         result = await generate(store, revision, request, semaphore)
         result["files"] = {
-            name.rsplit(".", 1)[1]: prefix() + f"/downloads/{revision}/sections/{result['section_id']}/{name}"
+            name.rsplit(".", 1)[1]: prefix()
+            + f"/downloads/{revision}/sections/{result['section_id']}/{name}"
             for name in sorted(FILES)
         }
         return result
 
-    @app.api_route("/api/revisions/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"])
-    @app.api_route("/downloads/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"])
+    @app.api_route(
+        "/api/revisions/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"]
+    )
+    @app.api_route(
+        "/downloads/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"]
+    )
     def section_artifact(revision: str, section_id: str, filename: str):
         from cad.section_service import section_file
 
         path = section_file(store, revision, section_id, filename)
-        return FileResponse(path, filename=filename,
-                            content_disposition_type="inline" if filename.endswith(".png") else "attachment",
-                            headers={"X-CAD-Revision": revision, "X-Content-Type-Options": "nosniff"})
+        return FileResponse(
+            path,
+            filename=filename,
+            content_disposition_type="inline" if filename.endswith(".png") else "attachment",
+            headers={"X-CAD-Revision": revision, "X-Content-Type-Options": "nosniff"},
+        )
 
     @app.post("/api/revisions/{revision}/{operation}")
     async def publish(

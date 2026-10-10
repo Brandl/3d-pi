@@ -137,7 +137,11 @@ def commit(store, request):
             "SELECT 1 FROM design_assets WHERE revision=?", (request.revision,)
         ).fetchone():
             raise Conflict("This revision is a related output, not a design change")
-        if request.source_document.model_dump(mode="json") != row["document"]:
+        # Historical schema-v1 records may omit later defaulted fields. Compare
+        # both through the same schema without changing the stored source/hash.
+        if request.source_document.model_dump(mode="json") != Document.model_validate(
+            row["document"]
+        ).model_dump(mode="json"):
             raise Conflict("Committed Git document does not match this CAD revision")
         if current["commits"] and current["commits"][-1]["document_hash"] == row["content_hash"]:
             raise Conflict("No design change; renders and exports do not create timeline entries")

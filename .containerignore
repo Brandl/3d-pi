@@ -9,6 +9,16 @@ web/dist
 web/test-results
 web/playwright-report
 data
+examples
+design
+designs
+milestones.md
+todo.md
+docs/workspace-plan.md
+docs/trilock-agent-audit.md
+docs/open-source-readiness.md
+docs/release-file-review.md
+docs/release-file-inventory.tsv
 .runtime
 .env
 .env.*

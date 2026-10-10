@@ -35,7 +35,7 @@ const loaded = await loadExtensions(
 );
 assert.deepEqual(loaded.errors, []);
 const tools = loaded.extensions[0].tools;
-assert.equal(tools.size, 18);
+assert.equal(tools.size, 19);
 let toolCwd=process.cwd();
 async function raw(name, params) {
   return tools
@@ -115,7 +115,7 @@ assert.equal(
 assert.equal(
   (await call("cad_measure", { revision: candidate.revision })).parts.enclosure
     .x,
-  80,
+  doc.parameters.width,
 );
 assert.equal(
   (await call("cad_validate", { revision: candidate.revision })).valid,
@@ -142,6 +142,13 @@ assert.match(sectionData.basis, /Exact STEP/);
 assert.ok(section.content.some(block => block.type === 'image'));
 assert.equal((await call('cad_section', {revision:candidate.revision, axis:'z', offset:1, tilt:[0,0]})).cached, true);
 assert.equal((await call('cad_inspect')).generation, state.generation);
+const profile=await call('cad_section_profile',{revision:candidate.revision,section_id:sectionData.section_id,part:'enclosure'});
+assert.ok(profile.points.length>=4&&profile.points.length<=512);
+assert.equal(profile.other_boundaries_omitted,4); // teaching enclosure's four mounting holes
+const meshSection=await call('cad_section',{revision:candidate.revision,representation:'mesh',axis:'z',offset:1,parts:['enclosure']});
+assert.match(meshSection.basis,/Approximate/);
+const meshProfile=await call('cad_section_profile',{revision:candidate.revision,section_id:meshSection.section_id,part:'enclosure'});
+assert.equal(meshProfile.representation,'mesh');
 
 const image = await raw("cad_render", {
   revision: candidate.revision,
@@ -313,5 +320,5 @@ try {
   await assert.rejects(()=>call('cad_commit',{...input,request_key:randomUUID()}),/Commit tracked source/);
 } finally {toolCwd=originalCwd;process.chdir(originalCwd);rmSync(gitRepo,{recursive:true,force:true});}
 console.log(
-  "Pi integration passed: 18 tools loaded; full section image and cache; design commits with Git/source verification, named emoji metadata, output attachments and dirty-source rejection; capabilities, tree, component inspection, idempotent build, measure, validate, render, publish, parameter edit, export discovery/four exports, history, cancel, restore; automatic image checkpoints, compaction reset, pre-publication review, legacy fallback and missing-image handling.",
+  "Pi integration passed: 19 tools loaded; exact/mesh sections, reusable section profiles, image and cache; design commits with Git/source verification, named emoji metadata, output attachments and dirty-source rejection; capabilities, tree, component inspection, idempotent build, measure, validate, render, publish, parameter edit, export discovery/four exports, history, cancel, restore; automatic image checkpoints, compaction reset, pre-publication review, legacy fallback and missing-image handling.",
 );

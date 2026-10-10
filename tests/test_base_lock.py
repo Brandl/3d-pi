@@ -1,4 +1,4 @@
-from pathlib import Path
+from local_examples import load_local_example
 import math
 import zipfile
 
@@ -12,9 +12,7 @@ from cad.casting_box import build
 
 
 def document():
-    doc = Document.model_validate_json(
-        Path("examples/gentle-twist-wide-end-down-master.json").read_text(encoding="utf-8")
-    )
+    doc = Document.model_validate(load_local_example("gentle-twist-wide-end-down-master"))
     doc.base_lock = True
     doc.parameters["master_base_thickness"] = 6.0
     doc.parameters["master_base_overhang"] = 14.0

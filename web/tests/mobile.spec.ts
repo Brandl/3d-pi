@@ -15,6 +15,14 @@ for(const width of [320,390,430,768,844]) test(`phone workspace panes and touch 
  await nav.getByRole('button',{name:'Chat',exact:true}).click();await expect(page.locator('#chat-input')).toBeVisible();
  await expect(page.locator('#viewport')).toBeHidden();
  const send=await page.locator('#chat-send').boundingBox();expect(send!.y+send!.height).toBeLessThan((await nav.boundingBox())!.y+1);
+ // Safari focuses sub-16px fields by zooming the whole page. Check computed
+ // cascade values, not just a mobile rule that later studio styles can override.
+ for(const selector of ['#chat-input','#project-select']){
+  const control=page.locator(selector);
+  if(await control.count())expect(await control.evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+ }
+ const viewportMeta=await page.locator('meta[name=viewport]').getAttribute('content');
+ expect(viewportMeta).not.toMatch(/user-scalable\s*=\s*no|maximum-scale\s*=\s*1(?:\D|$)/);
  await page.locator('#chat-input').fill('Keep this draft');
  await nav.getByRole('button',{name:'Parts',exact:true}).click();await expect(page.locator('#model-parts')).toBeVisible();
  await nav.getByRole('button',{name:'Chat',exact:true}).click();await expect(page.locator('#chat-input')).toHaveValue('Keep this draft');

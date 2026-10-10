@@ -1,4 +1,4 @@
-from pathlib import Path
+from local_examples import load_local_example
 import zipfile
 
 import pytest
@@ -10,9 +10,7 @@ from cad.casting_box import build
 
 
 def document():
-    doc = Document.model_validate_json(
-        Path("examples/gentle-twist-locked-base.json").read_text(encoding="utf-8")
-    )
+    doc = Document.model_validate(load_local_example("gentle-twist-locked-base"))
     doc.base_lock = False
     doc.captured_base = True
     doc.parameters["master_base_overhang"] = 0.0

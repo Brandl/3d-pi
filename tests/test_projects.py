@@ -1,5 +1,6 @@
 import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -68,9 +69,10 @@ def test_project_scope_and_generation_isolation(tmp_path):
 
 
 def test_copy_only_folder_migration(tmp_path):
-    spec = importlib.util.spec_from_file_location(
-        "migrate_projects", "scripts/migrate-project-folders.py"
-    )
+    script = Path(__file__).resolve().parent.parent / "scripts/migrate-project-folders.py"
+    if not script.is_file():
+        pytest.skip("Installation-specific migration utility is not in the source archive")
+    spec = importlib.util.spec_from_file_location("migrate_projects", script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     runtime = tmp_path / "runtime"

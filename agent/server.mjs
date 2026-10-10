@@ -10,12 +10,24 @@ export function visibleMessage(message) {
   return {role:message.role,text,tools,tool:message.toolName,error:Boolean(message.isError),timestamp:message.timestamp};
 }
 
-export function createBridge({session, token, journalPath, transcriptPath, projectionPath, refreshAuth=async()=>{}}) {
+export function createBridge({session, token, journalPath, transcriptPath, projectionPath, refreshAuth=async()=>{}, idleTimeoutMs=15*60*1000, turnTimeoutMs=60*60*1000}) {
   if (!token || token.length<32) throw new Error('Internal agent token is required');
   const digest = x=>createHash('sha256').update(x).digest();
   const secretDigest=digest('Bearer '+token);
   let jobs=existsSync(journalPath) ? JSON.parse(readFileSync(journalPath,'utf8')) : [];
   let busy=false, partial=null, error='', sequence=0, abortRequested=false;
+  let stopReason=null, idleTimer=null;
+  function stop(reason){stopReason=reason;abortRequested=true;void session.abort().catch(()=>{});}
+  function progress(){
+    clearTimeout(idleTimer);
+    if(busy){idleTimer=setTimeout(()=>stop('idle_timeout'),idleTimeoutMs);idleTimer.unref();}
+  }
+  function stoppedMessage(){
+    if(stopReason==='user')return 'Stopped by you. Changes already made are retained.';
+    if(stopReason==='idle_timeout')return 'Paused after no agent progress for 15 minutes. Inspect existing changes before continuing.';
+    if(stopReason==='turn_timeout')return 'Reached the one-hour turn limit. Inspect existing changes before continuing.';
+    return 'The model provider interrupted the response. No automatic retry was made; inspect existing changes before continuing.';
+  }
   const activeTools=new Map();
   function persist() {
     jobs=jobs.slice(-200);
@@ -32,6 +44,7 @@ export function createBridge({session, token, journalPath, transcriptPath, proje
   persist();
   const unsubscribe=session.subscribe(event=>{
     sequence++;
+    if(['message_update','message_end','tool_execution_start','tool_execution_end'].includes(event.type))progress();
     if (event.type==='message_update') partial=visibleMessage(event.message);
     if (event.type==='message_end') {
       partial=null;
@@ -68,7 +81,7 @@ export function createBridge({session, token, journalPath, transcriptPath, proje
         return reply(res,200,snapshot());
       }
       if (req.method==='POST' && req.url==='/abort') {
-        if (busy) {abortRequested=true;await session.abort();}
+        if (busy) {stopReason='user';abortRequested=true;await session.abort();}
         return reply(res,200,{ok:true});
       }
       if (req.method!=='POST' || req.url!=='/prompt') return reply(res,404,{detail:'Not found'});
@@ -88,7 +101,7 @@ export function createBridge({session, token, journalPath, transcriptPath, proje
       if (previous) return reply(res,previous.hash===hash ? 200 : 409,
         previous.hash===hash ? {job:previous} : {detail:'Request key already used for another prompt'});
       if (busy) return reply(res,409,{detail:'Pi is working. Stop it or wait before sending another message.'});
-      busy=true;error='';abortRequested=false;
+      busy=true;error='';abortRequested=false;stopReason=null;
       try {await refreshAuth();} catch {
         busy=false;return reply(res,503,{detail:'Provider login unavailable or expired. Renew the server-side pi login.'});
       }
@@ -96,18 +109,20 @@ export function createBridge({session, token, journalPath, transcriptPath, proje
       const job={id:input.request_key,hash,status:'running',created:Date.now()};
       jobs.push(job);
       try {persist();} catch {jobs.pop();busy=false;return reply(res,503,{detail:'Cannot persist the request; nothing was started'});}
-      const deadline=setTimeout(()=>{abortRequested=true;void session.abort().catch(()=>{});},15*60*1000);
-      deadline.unref();
+      const deadline=setTimeout(()=>stop('turn_timeout'),turnTimeoutMs);
+      deadline.unref();progress();
       const initialCount=session.messages.length;
       void session.prompt(input.text,{expandPromptTemplates:false}).then(()=>{
         const last=session.messages.slice(initialCount).filter(m=>m.role==='assistant').at(-1);
-        job.status=abortRequested || last?.stopReason==='aborted' ? 'aborted' : last?.stopReason==='error' ? 'failed' : 'complete';
-        if (last?.errorMessage) error=String(last.errorMessage).slice(0,1000);
+        job.status=stopReason?.endsWith('_timeout')?'timed_out':abortRequested || last?.stopReason==='aborted' ? 'aborted' : last?.stopReason==='error' ? 'failed' : 'complete';
+        if(job.status==='aborted'||job.status==='timed_out')error=stoppedMessage();
+        else if (last?.errorMessage) error=String(last.errorMessage).slice(0,1000);
       }).catch(cause=>{
         console.error('Agent turn failed:',String(cause).replace(/Bearer\s+\S+|eyJ[A-Za-z0-9_.-]+/g,'[redacted]').slice(0,1000));
-        job.status=abortRequested?'aborted':'failed';error=abortRequested?'Turn stopped. Inspect any changes already made.':'Agent turn failed. Inspect the model and retry if appropriate.';
+        job.status=stopReason?.endsWith('_timeout')?'timed_out':abortRequested?'aborted':'failed';error=abortRequested?stoppedMessage():'Agent turn failed. Inspect the model and retry if appropriate.';
       }).finally(()=>{
-        clearTimeout(deadline);
+        clearTimeout(deadline);clearTimeout(idleTimer);
+        job.stop_reason=stopReason??(job.status==='aborted'?'provider_aborted':job.status==='failed'?'provider_error':null);
         job.finished=Date.now();job.error=error;busy=false;partial=null;activeTools.clear();sequence++;
         try {persist();} catch {error='The turn ended, but its status could not be saved. Inspect the workspace.';}
       });
@@ -118,5 +133,5 @@ export function createBridge({session, token, journalPath, transcriptPath, proje
   });
   server.requestTimeout=15000;
   server.headersTimeout=10000;
-  return {server, dispose:async()=>{await session.abort();unsubscribe();session.dispose();}};
+  return {server, dispose:async()=>{clearTimeout(idleTimer);await session.abort();unsubscribe();session.dispose();}};
 }

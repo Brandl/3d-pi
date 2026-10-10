@@ -5,6 +5,17 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 data/
+# Local design examples are not part of the public source tree.
+/examples/
+# Archived prototypes, planning notes and installation-specific release audits.
+/design/
+/milestones.md
+/todo.md
+/docs/workspace-plan.md
+/docs/trilock-agent-audit.md
+/docs/open-source-readiness.md
+/docs/release-file-review.md
+/docs/release-file-inventory.tsv
 .runtime/
 node_modules/
 web/dist/

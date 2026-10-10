@@ -1,133 +1,161 @@
-# Password-protected CAD + pi workspace
+# Install the authenticated alpha studio
 
-## Scope and boundaries
+This guide builds containers **locally from source**. There are no prebuilt
+runtime releases. Dependencies retain their licences; read
+[third-party notices](../THIRD_PARTY_NOTICES.md) before redistributing an image.
 
-One trusted owner, one CAD design history and one persistent pi conversation. The browser can view earlier publications without changing the active model. Chat prompts are commands to an agent with CAD, shell and file tools; do not share this password with untrusted people. Separate projects/designs and fine-grained accounts are not implemented yet.
+## Prerequisites and boundary
 
-Three non-root containers share a rootless Podman pod's network:
+Use Linux, rootless Podman, Git, Node.js 24, uv and Python 3.12. Configure rootless
+UID/GID mappings first. Allow room for native dependencies, build caches, CAD
+artifacts and backups; resource limits do not prevent disk exhaustion. The
+launcher sets memory ceilings of 8 GiB CAD, 2 GiB agent and 1 GiB web.
 
-- `3d-pi-cad`: private modeling API / bounded geometry worker, persistent `/data`. No provider credentials.
-- `3d-pi-agent`: pi SDK 0.85.1, CAD extension and command/file tools. Persistent `/workspace` Git checkout and `/agent-state` sessions/request journal. Internal bearer-authenticated bridge on loopback port 8768; not host-published.
-- `3d-pi-web`: viewer, login and allowlisted agent proxy. Password hash, internal bridge token and a private website-session store mounted; no provider credentials or CAD data mount.
+Use a committed source checkout. Preparation clones committed Git source, not
+uncommitted edits. If starting with a source archive, first initialize its clean
+contents as a local Git repository and commit them, before adding credentials or
+runtime data. Independent-machine installation validation remains a release gate;
+these recipes are not a claim of portability to every OS or container engine.
 
-Host API and gateway ports bind **127.0.0.1 only**. Tunnel only the gateway through HTTPS. Do not publish the API or agent bridge. Containers have read-only root filesystems, writable temporary storage, dropped capabilities, no-new-privileges, PID/CPU/memory limits and no host/Podman socket. This is not a multi-tenant security sandbox; writable persistent volumes have no disk quota.
+Three non-root containers share a rootless pod network:
 
-Python/npm dependencies are locked and base images are digest-pinned. OS packages still come from their distribution repositories, so record built image IDs with each deployment; builds are not claimed bit-for-bit reproducible. Native runtime libraries include OpenGL, OpenMP, Kerberos error and PKCS#11 libraries needed by MeshLab. The image build context excludes runtime data, credentials, Git history and dependencies; COPY statements also whitelist source directories.
+| Service | Purpose | Writable persistent data |
+| --- | --- | --- |
+| CAD | Bounded geometry service and private API | CAD databases, artifacts, uploads, sections |
+| Agent | Project-scoped pi worker and protected router | Sources, conversations, provider state |
+| Web | Authenticated studio and allowlisted proxy | Hashed website login sessions |
 
-## Build and prepare (do not overwrite an existing runtime)
+The web service has no provider-credential or CAD-data mount. The agent has shell
+and file tools; this is one trusted owner's workspace, not an untrusted-user
+sandbox. Do not mount a container socket or the whole host home directory.
+
+## 1. Prepare isolated initial data
+
+For a new installation only; do not reuse or overwrite a live runtime:
+
+```sh
+uv sync --locked
+(cd web && npm ci && npm run build)
+uv run python -m cad.cli serve
+```
+
+In another terminal, run `uv run python -m cad.cli demo` to build/publish the
+teaching model. Stop the local service after it completes. Then:
 
 ```sh
 podman build -t localhost/3d-pi-cad:workspace -f Containerfile .
 podman build -t localhost/3d-pi-agent:workspace -f agent/Containerfile .
 python3 scripts/prepare-runtime.py --source "$PWD/data"
-.venv/bin/python -m cad.auth "$HOME/.local/share/3d-pi/secrets/password.json"
+uv run python -m cad.auth "$HOME/.local/share/3d-pi/secrets/password.json"
 ```
 
-The preparation script takes a SQLite backup and copies immutable artifacts into a separate directory, then creates a local Git clone without a remote. Quiesce publications/builds while taking the snapshot. It refuses active builds and never overwrites an existing destination database. The original `data/` remains untouched. A failed import may leave a private `.cad-import-*` staging directory for inspection; it is not selected as live data.
+Preparation copies the default CAD store using a SQLite backup and preserves
+original artifacts. It refuses active builds and does not overwrite an existing
+destination database. It is a bootstrap helper, **not** a complete multi-project
+backup/import utility. Stop all writers first. A failed import can leave private
+staging data; do not treat that directory as live state.
 
-Default persistent root: `~/.local/share/3d-pi`:
+The default private runtime is `~/.local/share/3d-pi`. Keep secret files mode 0600
+and directories private. Store the generated website password in a password
+manager; never commit it, log it in CI or bake it into an image. The password
+record is not a plaintext password.
 
-- `cad/project.sqlite3`, `cad/artifacts/`
-- `workspace/` (source Git, not a hot-reloaded application installation)
-- `agent/sessions/`, `agent/requests.json`, `agent/pi/`, `agent/models-store.json`
-- `secrets/password.json` (scrypt hash), `secrets/agent-token` (internal random bearer token)
-- `web-auth/sessions.sqlite3` (private website login sessions, not CAD data)
+## 2. Choose provider authentication
 
-Keep the root private and secrets mode 0600. No plaintext website password needs to be retained. `cad.auth --generate` prints a generated password once; store it in your password manager. Never commit secrets or sessions.
+Set `PI_PROVIDER` and `PI_MODEL` to an actual supported provider/model available
+to your account. Script defaults are not a promise of availability. Choose one
+authentication owner, rather than duplicating rotating OAuth tokens:
 
-## Provider login
+- **Host-owned login:** set `PI_SEED_AUTH_FILE="$HOME/.pi/agent/auth.json"` when
+  launching. Only that file is mounted read-only. The bridge refuses token writes
+  and refresh callbacks. Renew on the host; if renewal replaces the file by
+  rename, recreate the agent container while idle to pick up the new inode.
+- **Container-owned login:** omit the seed. After launch, use
+  `podman exec -it 3d-pi-agent pi`, then `/login`. Exit that interactive client
+  before browser work. Its credentials persist in the mounted agent state.
 
-Two modes:
+Never expose provider credentials to the browser, source repository or geometry
+worker. Provider/model changes and credential renewal may require an idle restart.
 
-1. **Existing host login, read-only bridge** (initial deployment): pass `PI_SEED_AUTH_FILE="$HOME/.pi/agent/auth.json"`. Only this file is mounted read-only, not the entire host pi directory. A credential-store adapter reads the selected provider and refuses all write/refresh callbacks. The host remains the sole OAuth refresh owner. Renew an expired login on the host; the agent rereads it before turns. If replacing the file by rename rather than writing in place, recreate the agent container so the file bind mount points at the new inode.
-2. **Dedicated container login:** omit the seed. Run `podman exec -it 3d-pi-agent pi`, use `/login`, and exit the interactive process before web work. `PI_CODING_AGENT_DIR=/agent-state/pi` persists that login. Do not initialize this mode by duplicating a rotating refresh token owned by another active client. The web SDK uses the same auth file; after login, restart the agent if necessary.
+### Startup login check in the browser
 
-`PI_PROVIDER` and `PI_MODEL` select the model (initially `openai-codex` / `gpt-6-astra`). A model must exist in the SDK catalog. A non-secret host `models-store.json` may be copied into `agent/models-store.json` for a catalog model not in the bundled list. Never bake provider auth into an image or pass provider tokens through the browser.
+The agent router checks local provider-credential metadata at startup and on each
+authenticated state read, even before a project worker exists. The chat panel
+shows the configured provider/model and server-terminal login instructions. It
+distinguishes container-owned login from the read-only host bridge, unreadable
+credentials, expired login and OAuth that Pi can attempt to renew on a request.
+Use **Recheck Pi login** after setup; regular polling also notices changes.
+A custom `CAD_POD` gets the matching agent-container command from the launcher.
 
-## Stage, verify, then cut over
+This check never refreshes tokens, evaluates key commands, starts a model turn or
+contacts a provider. “Available locally” is **not** proof of remote authentication,
+subscription/model entitlement or billing. Ambient/custom authentication remains
+unverified; absent stored credentials alone do not block these other providers.
+A missing default Codex login, missing host-bridge login or unreadable/expired
+credentials disables new sends, but never Stop. Drafts and uncertain receipts are
+preserved and are not automatically sent when login becomes available.
+
+An unreachable agent is shown separately from a missing login. Website login and
+provider login are independent; neither website logout nor this status check
+revokes provider credentials. Never paste authorization codes or keys into chat.
+
+## 3. Launch and expose only the gateway
+
+With the chosen `PI_PROVIDER`, `PI_MODEL` and optional `PI_SEED_AUTH_FILE` exported:
 
 ```sh
-CAD_POD=3d-pi-stage CAD_API_PORT=8875 CAD_WEB_PORT=8877 \
-PI_SEED_AUTH_FILE="$HOME/.pi/agent/auth.json" scripts/run-podman.sh
-```
-
-`CAD_RUNTIME_DIR` overrides the persistent root. Never run staging and live services against the same writable root simultaneously. Verify login, anonymous denials, downloads/checksums, a real pi tool call, a candidate geometry build without publication, and a pod restart. Original revision IDs and published history must remain intact.
-
-Stop the public tunnel before stopping/replacing the old services. Stop/remove the staging pod (not its persistent directories), stop old host services to free ports, then:
-
-```sh
-PI_SEED_AUTH_FILE="$HOME/.pi/agent/auth.json" scripts/run-podman.sh
-# Check localhost:8767 denies anonymous access before opening a tunnel.
-cloudflared tunnel --url http://127.0.0.1:8767
-```
-
-Quick Tunnel addresses are temporary. Use HTTPS and log in. Public downloads now require the same session; old anonymous links no longer grant access. The gateway offers no public CAD mutations/source: authenticated agent prompts are the only browser editing path.
-
-## Operations
-
-```sh
-podman pod stop 3d-pi
-podman pod start 3d-pi
-podman logs --tail 100 3d-pi-agent
+scripts/run-podman.sh
 podman healthcheck run 3d-pi-cad
 podman healthcheck run 3d-pi-web
 podman healthcheck run 3d-pi-agent
 ```
 
-Restart policies cover container failures; automatic host-boot startup/Quadlet and a stable tunnel/domain are separate follow-up work. Do not claim reboot persistence of the running service merely because its files persist.
+The launcher refuses an existing pod; it is not an in-place upgrade command.
+Default host ports are loopback 8765 (private CAD) and 8767 (web gateway). Agent
+ports are internal to the pod. Never expose the CAD API or agent bridge publicly.
+Put **only the web gateway behind HTTPS**, using a reverse proxy or tunnel you
+control. Secure cookies must not be worked around by disabling authentication.
 
-Website logins last 365 days of inactivity. Successful authenticated HTTP requests renew the lifetime at most once daily and refresh the Secure/HttpOnly/SameSite=Strict cookie. Logout immediately revokes that session. With `CAD_SESSION_DB=/auth-state/sessions.sqlite3` and the private writable `web-auth:/auth-state` mount (configured by `run-podman.sh`), logins survive gateway/container restarts and image replacements. The database is mode 0600 in a mode 0700 directory; only SHA-256 bearer-token hashes are stored, with CSRF secrets, timestamps and a credential fingerprint. At most 128 sessions are retained; oldest sessions are evicted at the limit. Without `CAD_SESSION_DB`, development/test sessions remain memory-only. Changing the password configuration and restarting the gateway revokes all stored sessions. To revoke every device without changing the password, stop the gateway, remove its private session database (including journal sidecars if present), and restart it. Treat this store as sensitive runtime data; never commit it or bake it into images. Users of shared devices should sign out. Clearing cookies, private browsing, or changing the temporary tunnel hostname still requires login; a stable hostname is needed to avoid the last case. Upgrading from the old memory-only gateway requires one new login. Password login is throttled and password hashes are checked serially; authenticated mutations require Origin + CSRF validation. All protected responses are no-store. A stopped/restarted agent preserves conversation and request IDs; an interrupted request is marked interrupted and is never automatically replayed. Only one turn is accepted at a time; repeated request IDs are deduplicated. Stop aborts the turn. A 15-minute turn limit also requests abort. Aborting does **not** roll back already executed CAD publications or file changes; inspect current state before retrying.
+Log in through the HTTPS gateway. Select/create a project and ask for a small
+model, inspection and an explicit saved design without publication. Verify live
+intermediaries, saved history, named downloads, logout denial and restart recovery.
+Check actual downloaded file contents, not just successful HTTP status codes.
 
-To change the website password, run `cad.auth` on the existing hash path and restart the web container. Keep that hash path's permissions private. Do not change it while expecting old sessions to remain valid.
+For a separate staging installation, use `CAD_RUNTIME_DIR`, `CAD_POD`,
+`CAD_API_PORT` and `CAD_WEB_PORT`; pass the same runtime path to preparation and
+password creation. Never share writable runtime directories with production.
+Stable DNS, HTTPS renewal and host-boot supervision are operator responsibilities.
 
-For upgrades, finish/stop agent work and CAD builds, back up the runtime, checkpoint source Git, rebuild images, stop/remove the pod, and rerun the deployment script. The script refuses to replace an existing pod implicitly. Application changes in the agent's `/workspace` require an explicit image rebuild/deployment; they do not hot-reload the running services.
+## Sessions and interruptions
 
-## Backup and rollback
+Website sessions have a 365-day inactivity lifetime with at-most-daily renewal.
+Only token hashes are persisted. Logout revokes a session; changing password
+configuration and restarting revokes stored sessions. Use a trusted device and
+protect the login database as private state.
 
-Stop all writers for a full backup, or combine a SQLite online backup with an immutable artifact copy and consistent session/source snapshots. Back up CAD data, agent state and workspace Git separately from secrets. Encrypt backups that include conversations or credentials. A local Git repository is not an off-machine backup; no remote is configured automatically.
+Chat drafts/uncertain receipts live in per-project, per-tab session storage and
+are cleared on logout. Provider credentials do not live there. The agent has a
+15-minute no-progress timeout and a one-hour absolute bound. Stop/timeout/provider
+failure is not rollback. Inspect existing source and CAD changes before continuing;
+very old uncertain requests must not be blindly replayed.
 
-The initial migration retains the original repository's `data/` as a rollback copy. Before any rollback, preserve the newer container runtime too: switching back discards newer live changes from view unless they are explicitly reconciled. Never `git reset` or overwrite runtime data as a substitute for migration.
+## Upgrade, backup and recover
 
-To roll back the runtime, stop the tunnel and container pod, start the original CAD service against its original data, and run the **password-protected** gateway with `CAD_PASSWORD_HASH_FILE` configured. Verify anonymous access is blocked before retunneling. Do not restore the old anonymous public gateway.
+1. Wait for agent turns and CAD builds to finish; check idleness again immediately
+   before replacement. Back up first and record source/image versions.
+2. Close the public entry point during replacement. Keep previous images/containers
+   available for rollback. Source edits do not hot-reload installed services.
+3. Verify saved heads, history, outputs and pre-existing authentication before
+   reopening access. Restart policy alone is not a boot-supervision plan.
 
-## Initial deployment verification
+For complete backups, stop writers or coordinate SQLite online backups with
+consistent artifact, upload, source-Git and session snapshots. Include each
+project's CAD symlink target. Store encrypted off-machine copies; protect provider
+credentials separately. Backing up only the default database is insufficient.
 
-At source checkpoint `49613c8`, staging used a separate copy on ports 8875/8877 before cutover to 8765/8767. All 30 publications, 32 original build records and 712 artifact files were preserved; every copied artifact matched byte-for-byte. A fresh, unpublished container build of generation 30's Origami document passed validation and produced five STL files identical to the published originals. Published generation 30 was not changed.
+Preserve newer data before rollback. Confirm old code understands the current
+schema; never reset history, discard new artifacts or restore an anonymous gateway
+as a shortcut. See [project storage](projects.md) and [security](../SECURITY.md).
 
-A real containerized pi turn called `cad_inspect` successfully. Conversation/request state survived container recreation. Login/logout and protected chat were checked in a real browser; all five public HTTPS Playwright tests passed, including timeline browsing, historical downloads and PNG/WebGL fallbacks. Backend: 91 tests; agent bridge/credentials: four tests. All three container health checks passed. Initial built image IDs: CAD `55ab01cff1bf`, agent `1138c66f5af6`.
-
-### Workbench UI update
-
-Source checkpoint `d93b44b` adds the CAD command ribbon/model browser/bottom timeline and component reference UI. Only the web container was replaced (image `2f8edd7f08c0`); the running CAD and pi containers were left intact. Seven public HTTPS browser tests passed, covering login/logout, desktop/mobile library drafts, timeline browsing, downloads and WebGL/PNG views. The library is a bundled reference catalog with explicit chat drafts, not automatic component instantiation. The previous web image is retained as `localhost/3d-pi-cad:before-workbench` for rollback.
-
-### Refined CAD tools and shared tree
-
-Source checkpoint `3264927` upgrades the API, gateway and persistent pi agent together. Fifteen CAD tools expose live limits, revision/feature/part/interface trees, component inspection, focused diagnostics and explicit cancellation/idempotent retries. The model browser consumes the same tree endpoints. No geometry was published by the upgrade; all pre-upgrade stored state was checked unchanged. The real web agent successfully called capabilities, inspect and tree in a read-only smoke turn.
-
-Verification: 97 backend tests, four bridge/credential tests, the actual pi loader integration exercising all 15 CAD tools against isolated data, and eight public HTTPS browser tests passed. Prior images are retained as `localhost/3d-pi-{cad,web,agent}:before-tool-refinement`. See [tool contracts](agent-tools.md) for semantics and limitations.
-
-### Automatic visual checkpoints
-
-Source `1053c1f` adds automatic multi-view image tool results, separate named-colour review PNGs, legacy-image fallback, bounded delivery, compaction reset and an explicit pause for unseen publish/restore checkpoints. `fdcc09c` caps closer inspection framing using projected vertices so bulky assemblies remain inside the viewport. See [visual-review semantics](visual-review.md); hidden-line/dotted occlusion rendering is still planned.
-
-The real persistent agent received four image blocks from a default `cad_inspect` call and described the visible assembly without building or publishing. Its saved tool result was checked for all four actual images. Full backend suite: 99 tests passed before the framing follow-up; nine targeted rendering/geometry tests passed afterward, including projected-cube containment. The actual pi-loader integration covers automatic images, compaction reset, pre-publication pausing, legacy fallback and missing-image handling. Pre-upgrade CAD state remained unchanged. Prior service images are retained under `:before-visual-checkpoints`.
-
-### Folder-project rollout
-
-`ff31111` introduced [folder projects](projects.md); `46252ae` additionally hardens cancelled transcript downloads. The live copy-only migration preserved all **39 original revision records and 30 publications**, all copied artifact bytes, and the original runtime/agent session files. Dripper remains generation 30; Bike basket twist-lock has three imported unpublished candidates and generation 0. Both projects retain hashed, explicitly shared legacy web-pi transcripts. New source repositories and canonical pi JSONL sessions are separate.
-
-Validation: 102 backend tests, six agent tests, the real 15-tool loader integration against an isolated project-scoped endpoint, and two isolated local-browser project tests passed. Real production-browser read-only turns used different project session IDs, received four dripper / three bike image blocks, and reported correct scoped CAD state. The bike conversation resumed with the same session ID and previous messages after an agent-container restart. Local desktop/mobile checks found no browser errors or horizontal page overflow. Verification did not build or publish anything. Prior service images remain tagged `:before-projects`; original root data remains available for rollback. Read the migration/rollback notes before using those older images.
-
-## Validation commands
-
-```sh
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m pytest -q
-.venv/bin/ruff check cad tests scripts/prepare-runtime.py
-(cd agent && npm test)
-(cd web && npm run build)
-# Authenticated browser storage state is a secret: use a private temporary path.
-(cd web && CAD_URL=https://your-gateway CAD_BROWSER_AUTH=/private/browser-state.json \
-  npx playwright test tests/timeline.spec.ts tests/casting-box.spec.ts)
-```
-
-Do not commit browser storage state, traces containing secrets, or provider logs with credentials.
+Mutation-heavy browser/tool tests belong on isolated data and ports. Authenticated
+browser traces, logs and storage exports may contain secrets and must stay private.

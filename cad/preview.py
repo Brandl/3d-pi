@@ -43,10 +43,11 @@ def published(revision):
     if not re.fullmatch(r"[a-f0-9]{32}", revision):
         raise HTTPException(404)
     state = upstream("/api/state")
-    workspace = state.get("workspace", {})
+    workspace = state.get("workspace") or {}
     registered = {r["revision"] for r in workspace.get("commits", []) + workspace.get("assets", [])}
     if project_id.get() and (
         revision in registered
+        or any(r["revision"] == revision for r in state.get("intermediates", []))
         or any(r["id"] == revision and r["status"] == "ready" for r in state["history"])
     ):
         return upstream(f"/api/revisions/{revision}")
@@ -63,7 +64,11 @@ def state():
         "revision": data["revision"],
         "generation": data["generation"],
         "workspace": data.get("workspace") if project_id.get() else None,
-        "candidate_names": {r["id"]: r.get("name", r["id"][:8]) for r in data["history"]}
+        "intermediates": data.get("intermediates", []) if project_id.get() else [],
+        "event_sequence": data.get("event_sequence") if project_id.get() else data["generation"],
+        "candidate_names": data.get(
+            "candidate_names", {r["id"]: r.get("name", r["id"][:8]) for r in data["history"]}
+        )
         if project_id.get()
         else {},
         "candidates": data.get(
@@ -77,7 +82,14 @@ def state():
         )
         if project_id.get()
         else [],
-        "history": ([{'id': r['id'], 'status': r['status']} for r in data['history']] if project_id.get() else ([{"id": data["revision"], "status": "ready"}] if data["revision"] else [])),
+        "history": (
+            [
+                {"id": r["id"], "status": r["status"], "valid": r.get("valid")}
+                for r in data["history"]
+            ]
+            if project_id.get()
+            else ([{"id": data["revision"], "status": "ready"}] if data["revision"] else [])
+        ),
         "publications": [
             {
                 key: item.get(key)
@@ -133,7 +145,9 @@ def artifact(revision: str, filename: str, request: Request):
     }
     if filename not in allowed:
         raise HTTPException(404)
-    return download_response(revision, filename, request, f"/api/revisions/{revision}/artifacts/{filename}")
+    return download_response(
+        revision, filename, request, f"/api/revisions/{revision}/artifacts/{filename}"
+    )
 
 
 @app.api_route("/downloads/{revision}/sections/{section_id}/{filename}", methods=["GET", "HEAD"])
@@ -143,7 +157,9 @@ def section_download(revision: str, section_id: str, filename: str, request: Req
     published(revision)
     if not re.fullmatch(r"[a-f0-9]{64}", section_id) or filename not in FILES:
         raise HTTPException(404)
-    return download_response(revision, filename, request, f"/api/revisions/{revision}/sections/{section_id}/{filename}")
+    return download_response(
+        revision, filename, request, f"/api/revisions/{revision}/sections/{section_id}/{filename}"
+    )
 
 
 def download_response(revision, filename, request, path):
@@ -291,8 +307,9 @@ def agent_request(operation, body=None):
 
 
 def upload_request(path, method, body=None, headers=None):
-    req = urllib.request.Request(ORIGIN + prefix() + path, data=body,
-                                 method=method, headers=headers or {})
+    req = urllib.request.Request(
+        ORIGIN + prefix() + path, data=body, method=method, headers=headers or {}
+    )
     try:
         response = urllib.request.urlopen(req, timeout=60)
     except urllib.error.HTTPError as exc:
@@ -301,10 +318,19 @@ def upload_request(path, method, body=None, headers=None):
         raise HTTPException(503, "Project files unavailable") from exc
     with response:
         data = response.read() if method != "HEAD" else b""
-        forwarded = {name: response.headers[name] for name in (
-            "Content-Type", "Content-Length", "Content-Disposition", "Content-Range",
-            "Accept-Ranges", "ETag", "Last-Modified"
-        ) if response.headers.get(name) is not None}
+        forwarded = {
+            name: response.headers[name]
+            for name in (
+                "Content-Type",
+                "Content-Length",
+                "Content-Disposition",
+                "Content-Range",
+                "Accept-Ranges",
+                "ETag",
+                "Last-Modified",
+            )
+            if response.headers.get(name) is not None
+        }
         forwarded.update({"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
         return Response(data, status_code=response.code, headers=forwarded)
 
@@ -321,8 +347,9 @@ async def project_uploads(request: Request, ident: str | None = None):
     if request.method in ("GET", "HEAD") and ident:
         path = f"/downloads/uploads/{ident}/file"
     body = None
-    headers = {k: request.headers[k] for k in ("content-type", "range", "if-range")
-               if k in request.headers}
+    headers = {
+        k: request.headers[k] for k in ("content-type", "range", "if-range") if k in request.headers
+    }
     if request.method in ("POST", "PATCH"):
         data = bytearray()
         limit = MAX_BODY if request.method == "POST" else 32768

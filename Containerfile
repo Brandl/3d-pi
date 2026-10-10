@@ -10,10 +10,10 @@ FROM docker.io/library/python:3.12-slim@sha256:2fe5997d249a808b8eeea52c58a1dbffb
 RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 libcom-err2 libp11-kit0 fonts-dejavu-core ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir uv==0.12.16
 WORKDIR /opt/cad
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock LICENSE THIRD_PARTY_NOTICES.md ./
+COPY LICENSES/ ./LICENSES/
 RUN uv sync --locked --no-dev --no-install-project
 COPY cad/ ./cad/
-COPY examples/ ./examples/
 COPY --from=viewer /build/web/dist ./web/dist
 RUN useradd --uid 1000 --create-home cad && chmod -R a+rX /opt/cad
 ENV PATH="/opt/cad/.venv/bin:$PATH" CAD_DATA_DIR=/data PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1

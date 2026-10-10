@@ -1,4 +1,5 @@
 """Opaque project files: never parsed, executed, or adopted as CAD revisions."""
+
 import hashlib
 import re
 import time
@@ -35,9 +36,13 @@ class NoteRequest(Strict):
 
 def filename(value):
     value = unicodedata.normalize("NFC", value or "").strip()
-    if (not value or len(value) > 240 or value in (".", "..")
-            or any(c in value for c in "/\\")
-            or any(unicodedata.category(c).startswith("C") for c in value)):
+    if (
+        not value
+        or len(value) > 240
+        or value in (".", "..")
+        or any(c in value for c in "/\\")
+        or any(unicodedata.category(c).startswith("C") for c in value)
+    ):
         raise HTTPException(422, "Invalid filename")
     return value
 
@@ -61,11 +66,16 @@ def install(app, catalog):
     def listing():
         store = selected(catalog)
         with store.connection() as db:
-            rows = [dict(r) for r in db.execute(
-                "SELECT * FROM project_uploads ORDER BY created DESC,id"
-            )]
-        return {"uploads": rows, "max_file_bytes": MAX_FILE,
-                "max_project_bytes": MAX_PROJECT, "max_files": MAX_FILES}
+            rows = [
+                dict(r)
+                for r in db.execute("SELECT * FROM project_uploads ORDER BY created DESC,id")
+            ]
+        return {
+            "uploads": rows,
+            "max_file_bytes": MAX_FILE,
+            "max_project_bytes": MAX_PROJECT,
+            "max_files": MAX_FILES,
+        }
 
     @app.post("/api/uploads", status_code=201)
     async def upload(request: Request):
@@ -99,9 +109,10 @@ def install(app, catalog):
                 with path.open("xb") as output:
                     created = True
                     output.write(data)
-                db.execute("INSERT INTO project_uploads VALUES (?,?,?,?,?,?,1)",
-                           (ident, name, len(data), hashlib.sha256(data).hexdigest(),
-                            note, time.time()))
+                db.execute(
+                    "INSERT INTO project_uploads VALUES (?,?,?,?,?,?,1)",
+                    (ident, name, len(data), hashlib.sha256(data).hexdigest(), note, time.time()),
+                )
         except BaseException:
             if created:
                 path.unlink(missing_ok=True)
@@ -118,8 +129,10 @@ def install(app, catalog):
                 raise Missing("Unknown upload")
             if row[0] != request.version:
                 raise Conflict("Note changed elsewhere; refresh before editing")
-            db.execute("UPDATE project_uploads SET note=?,version=version+1 WHERE id=?",
-                       (request.note, ident))
+            db.execute(
+                "UPDATE project_uploads SET note=?,version=version+1 WHERE id=?",
+                (request.note, ident),
+            )
         return get(store, ident)
 
     @app.delete("/api/uploads/{ident}", status_code=204)
@@ -137,7 +150,13 @@ def install(app, catalog):
         path = store.root / "uploads" / row["id"]
         if not path.is_file() or path.is_symlink():
             raise Missing("Upload file unavailable")
-        return FileResponse(path, filename=row["filename"], media_type="application/octet-stream",
-                            headers={"X-Content-Type-Options": "nosniff",
-                                     "Content-Security-Policy": "sandbox",
-                                     "Cache-Control": "no-store"})
+        return FileResponse(
+            path,
+            filename=row["filename"],
+            media_type="application/octet-stream",
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "sandbox",
+                "Cache-Control": "no-store",
+            },
+        )

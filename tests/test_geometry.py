@@ -1,5 +1,7 @@
 import json
-from pathlib import Path
+import math
+from local_examples import load_local_example
+from cad.demo import enclosure_document
 
 import build123d as b
 import ezdxf
@@ -13,7 +15,7 @@ from test_schema import box_document
 
 @pytest.fixture(scope="module")
 def enclosure():
-    return Document.model_validate_json(Path("examples/enclosure.json").read_text(encoding="utf-8"))
+    return Document.model_validate(enclosure_document())
 
 
 def test_enclosure_changes(enclosure):
@@ -38,15 +40,22 @@ def test_all_exports_and_renders(enclosure, tmp_path):
     assert result["report"]["valid"]
     step = b.import_step(tmp_path / "model.step")
     assert len(step.solids()) == 2
-    assert step.bounding_box().size.X == pytest.approx(175)
+    p = enclosure.parameters
+    span = 2 * p["width"] + p["gap"]
+    assert step.bounding_box().size.X == pytest.approx(span)
     # Independent mesh reader validates the printing artifacts.
     stl = trimesh.load(tmp_path / "model.stl", force="mesh")
     assert stl.is_watertight
-    assert stl.volume == pytest.approx(36444.2401, rel=0.003)
+    expected_volume = (
+        p["width"] * p["depth"] * (p["height"] + p["lid_thickness"])
+        - (p["width"] - 2 * p["wall"]) * (p["depth"] - 2 * p["wall"]) * (p["height"] - p["wall"])
+        - 4 * math.pi * p["hole_radius"] ** 2 * (p["wall"] + p["lid_thickness"])
+    )
+    assert stl.volume == pytest.approx(expected_volume, rel=0.003)
     scene = trimesh.load(tmp_path / "model.3mf", force="scene")
     assert len(scene.geometry) == 2
     assert all(mesh.is_watertight for mesh in scene.geometry.values())
-    assert scene.bounds[1][0] == pytest.approx(175)
+    assert scene.bounds[1][0] == pytest.approx(span)
     dxf = ezdxf.readfile(tmp_path / "section-lid_profile.dxf")
     assert dxf.units == 4  # millimeters
     assert not dxf.audit().has_errors
@@ -98,7 +107,7 @@ def test_invalid_dimension_names_feature():
 
 @pytest.mark.parametrize("filename", ["bracket.json", "mounting-plate.json"])
 def test_example_regeneration(filename):
-    doc = Document.model_validate_json((Path("examples") / filename).read_text(encoding="utf-8"))
+    doc = Document.model_validate(load_local_example(filename))
     for width in (60, 100):
         doc.parameters["width"] = width
         parts, expressions = construct(doc)
