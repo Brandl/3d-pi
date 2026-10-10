@@ -1,14 +1,10 @@
 # 3d-pi
 
-### Describe a part. Watch it take shape. Refine it in conversation.
-
-A self-hosted CAD workspace powered by [pi](https://github.com/earendil-works/pi).
-Chat with the agent, inspect live 3D previews, and save your designs with their
-source and revision-bound exports—all in one browser workspace.
+Self-hosted CAD with [pi](https://github.com/earendil-works/pi).
+Describe and edit models in chat, inspect them in 3D, and download STEP, STL or
+3MF files.
 
 **[Get started ↓](#get-started)** · **[Install the chat studio](docs/container-deployment.md)** · **[Documentation](docs/README.md)**
-
-*Experimental alpha · Linux · One trusted owner · Apache-2.0 project source*
 
 ![3d-pi demo: describe a box and lid, inspect the model, and download separate 3MF files](docs/assets/3d-pi-box-and-lid-demo.gif)
 
@@ -56,7 +52,7 @@ running service. Use the fresh demo data directory above, not an existing design
 workspace. This setup provides the **CAD service and viewer, not browser chat**.
 Keep it on loopback; use the studio guide for authenticated remote access.
 
-## From an idea to a saved design
+## Features
 
 - **Talk through your model.** Persistent conversations and separate source
   repositories keep projects organized.
@@ -97,7 +93,7 @@ uncommitted preview. Stopping a turn does not roll back completed source changes
 builds or commits. Multi-step saving isn't an atomic transaction. Back up before
 upgrades; APIs and storage may change.
 
-## Explore further
+## Documentation
 
 - [Installation and provider setup](docs/container-deployment.md)
 - [Studio, history and live previews](docs/studio-ui.md)
